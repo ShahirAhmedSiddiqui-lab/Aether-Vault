@@ -100,9 +100,9 @@ export function getOnboardingItem(): KnowledgeItem {
 
   return {
     id: 'onboarding-manual',
-    title: 'Welcome to Aether Vault: Your AI Second Brain',
+    title: 'Welcome to Memora: Your AI Second Brain',
     content:
-      'Welcome to Aether Vault! Save notes, articles, tweets, video links, PDFs, and voice memos. The app summarizes each item, organizes tags, and lets you ask your vault contextual questions.',
+      'Welcome to Memora! Save notes, articles, social posts, video links, PDFs, and voice memos. The app summarizes each item, organizes tags, and lets you ask your vault contextual questions.',
     summary:
       'This starter guide explains the capture flow, file support, summaries, flashcards, and chat-based recall features inside your vault.',
     processingStatus: 'ready',
@@ -111,7 +111,7 @@ export function getOnboardingItem(): KnowledgeItem {
     createdAt: 'Just now',
     createdAtDate,
     updatedAtDate: createdAtDate,
-    source: 'Aether Vault',
+    source: 'Memora',
     flashcards: [
       {
         id: 'fc-welcome-1',

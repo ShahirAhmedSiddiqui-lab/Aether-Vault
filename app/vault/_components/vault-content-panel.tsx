@@ -78,7 +78,7 @@ export function VaultContentPanel({
           <Inbox className="w-4 h-4 text-neutral-400 shrink-0 ml-3" />
           <input
             type="text"
-            placeholder="Fast save: paste a YouTube link, tweet quote, research paper or note..."
+            placeholder="Fast save: paste a YouTube link, social link, research paper, or note..."
             value={inlineInput}
             onChange={(e) => onInlineInputChange(e.target.value)}
             className="flex-1 bg-transparent border-none text-xs text-neutral-800 placeholder-neutral-400 focus:outline-none py-1.5"
@@ -234,7 +234,7 @@ export function VaultContentPanel({
             <div className="space-y-1 md:w-1/3">
               <div className="text-2xl font-bold tracking-tight text-neutral-900 leading-none">{items.length}</div>
               <p className="text-[10px] text-neutral-400 font-mono uppercase tracking-wider">active second mind assets</p>
-              <p className="text-[11px] text-neutral-500 max-w-xs">Dynamic count of research videos, PDFs, and twitter threads indexed.</p>
+              <p className="text-[11px] text-neutral-500 max-w-xs">Dynamic count of research videos, PDFs, and saved social links indexed.</p>
             </div>
 
             <div className="flex-1 w-full bg-neutral-50/50 p-3 rounded-lg flex flex-col justify-between">

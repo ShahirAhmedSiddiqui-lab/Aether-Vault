@@ -131,7 +131,7 @@ ${fileContext}`;
       contents: modelContents,
       config: {
         systemInstruction:
-          'You are AetherVault AI. Produce grounded, source-faithful knowledge summaries. Prefer precision over polish. Never fabricate missing facts.',
+          'You are Memora AI. Produce grounded, source-faithful knowledge summaries. Prefer precision over polish. Never fabricate missing facts.',
         temperature: 0.1,
         responseMimeType: 'application/json',
         responseSchema: {
@@ -234,9 +234,9 @@ Summary: ${item.summary}
 ---`;
   }).join('\n\n');
 
-  const historyContext = chatHistory.map(h => `${h.role === 'user' ? 'User' : 'AetherVault'}: ${h.content}`).join('\n');
+  const historyContext = chatHistory.map(h => `${h.role === 'user' ? 'User' : 'Memora'}: ${h.content}`).join('\n');
 
-  const prompt = `You are the chat interface of AetherVault, the user's AI Second Brain.
+  const prompt = `You are the chat interface of Memora, the user's AI Second Brain.
 The user is asking a question about their saved knowledge items.
 Answer their request objectively, conversationally, and accurately based ONLY on their saved digital mind.
 
@@ -259,7 +259,7 @@ Return a response in JSON containing:
       contents: prompt,
       config: {
         systemInstruction:
-          'You are the cognitive heart of AetherVault. You find connections, answer questions on saved articles/videos/tweets/notes, and synthesize insights seamlessly. Always respond structured as JSON.',
+          'You are the cognitive heart of Memora. You find connections, answer questions on saved articles/videos/social links/notes, and synthesize insights seamlessly. Always respond structured as JSON.',
         temperature: 0.3,
         responseMimeType: 'application/json',
         responseSchema: {
@@ -524,7 +524,7 @@ async function fetchUrlContext(url: string) {
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 AetherVaultBot/1.0',
+        'User-Agent': 'Mozilla/5.0 MemoraBot/1.0',
       },
       cache: 'no-store',
     });
@@ -560,7 +560,7 @@ async function fetchYouTubeContext(url: string) {
     const response = await fetch(oembedUrl, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 AetherVaultBot/1.0',
+        'User-Agent': 'Mozilla/5.0 MemoraBot/1.0',
       },
       cache: 'no-store',
     });

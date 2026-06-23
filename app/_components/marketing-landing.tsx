@@ -1,20 +1,13 @@
 'use client';
 
 import { ArrowRight, Bot, Layers, Sparkles } from 'lucide-react';
+import { BrandLockup } from './brand-lockup';
 
 export function MarketingLanding() {
   return (
     <div className="min-h-screen bg-white text-neutral-900 font-sans relative antialiased flex flex-col justify-between overflow-x-hidden">
       <header className="max-w-7xl mx-auto w-full px-6 py-6 flex justify-between items-center shrink-0 border-b border-neutral-100">
-        <div className="flex items-center space-x-3 select-none">
-          <div className="w-8 h-8 rounded-lg bg-neutral-900 flex items-center justify-center text-white font-mono font-bold leading-none shadow-sm text-sm">
-            A
-          </div>
-          <div>
-            <span className="font-extrabold text-neutral-900 block text-sm tracking-tight leading-none">Aether Vault</span>
-            <span className="text-[9px] text-neutral-400 font-bold uppercase tracking-wider font-mono block mt-1">AI Second Brain</span>
-          </div>
-        </div>
+        <BrandLockup size="md" />
         <div className="flex items-center space-x-4">
           <button
             onClick={() => {
@@ -43,7 +36,7 @@ export function MarketingLanding() {
             Find it in seconds.
           </h1>
           <p className="text-sm md:text-base text-neutral-500 max-w-lg mx-auto leading-relaxed">
-            People save YouTube videos, tweets, articles, PDFs, and notes - then lose them forever. Aether Vault
+            People save YouTube videos, social links, articles, PDFs, and notes - then lose them forever. Memora
             listens, transcribes, and maps your knowledge instantly.
           </p>
         </div>
@@ -114,13 +107,13 @@ export function MarketingLanding() {
           <span className="text-neutral-900 font-bold">&bull; YouTube videos</span>
           <span className="text-neutral-900 font-bold">&bull; PDF Papers</span>
           <span className="text-neutral-900 font-bold">&bull; Voice Notes / MP3</span>
-          <span className="text-neutral-900 font-bold">&bull; Twitter posts</span>
+          <span className="text-neutral-900 font-bold">&bull; Social links</span>
           <span className="text-neutral-900 font-bold">&bull; Articles & web-text</span>
         </div>
       </main>
 
       <footer className="py-6 border-t border-neutral-100 text-center text-[10px] text-neutral-400 font-mono tracking-widest shrink-0">
-        AETHER VAULT CORE &copy; {new Date().getFullYear()} &bull; POWERED BY GOOGLE GEMINI 3.5 FLASH
+        MEMORA CORE &copy; {new Date().getFullYear()} &bull; POWERED BY GOOGLE GEMINI 3.5 FLASH
       </footer>
     </div>
   );

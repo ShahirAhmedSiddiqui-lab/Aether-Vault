@@ -8,7 +8,6 @@ import {
   CheckCircle,
   FileText,
   Globe,
-  HelpCircle,
   Inbox,
   Layers,
   Mic,
@@ -24,6 +23,7 @@ import {
 import { ChatMessage, KnowledgeItem } from '@/lib/db';
 import { matchesSearch } from '@/lib/supabase/vault';
 import { cn } from '@/lib/utils';
+import { BrandLockup } from '@/app/_components/brand-lockup';
 import { FormattedMarkdown } from './formatted-markdown';
 import { VaultContentPanel } from './vault-content-panel';
 import { VaultDetailPanel } from './vault-detail-panel';
@@ -34,6 +34,47 @@ type VaultIdentity = {
 };
 
 type VaultTab = 'Overview' | 'Articles' | 'Videos' | 'PDFs' | 'Social Links' | 'Voice Notes' | 'Chat' | 'Guide';
+
+const captureCopy: Record<
+  Exclude<VaultTab, 'Overview' | 'Chat' | 'Guide'>,
+  {
+    sourceLabel: string;
+    sourcePlaceholder: string;
+    textLabel: string;
+    textPlaceholder: string;
+  }
+> = {
+  Articles: {
+    sourceLabel: 'Article or Web Link',
+    sourcePlaceholder: 'https://example.com/insightful-article',
+    textLabel: 'Article Notes, Quotes, or Pasted Text',
+    textPlaceholder: 'Paste article highlights, web excerpts, or your own written notes here...',
+  },
+  Videos: {
+    sourceLabel: 'Video Link',
+    sourcePlaceholder: 'https://www.youtube.com/watch?v=...',
+    textLabel: 'Video Notes, Timestamps, or Transcript',
+    textPlaceholder: 'Add key timestamps, ideas from the video, or any transcript snippets you want stored...',
+  },
+  PDFs: {
+    sourceLabel: 'Supplementary Notes or URL (Optional)',
+    sourcePlaceholder: 'https://arxiv.org/abs/2401...',
+    textLabel: 'PDF Context Notes',
+    textPlaceholder: 'Any additional instructions or specific topics to focus on...',
+  },
+  'Social Links': {
+    sourceLabel: 'Social Link',
+    sourcePlaceholder: 'https://x.com/... or https://linkedin.com/...',
+    textLabel: 'Post Text, Thread Notes, or Commentary',
+    textPlaceholder: 'Paste the post text, thread summary, or your own notes about why this social link matters...',
+  },
+  'Voice Notes': {
+    sourceLabel: 'Voice Source',
+    sourcePlaceholder: '',
+    textLabel: 'Title or Brief Notes',
+    textPlaceholder: 'Give this voice memo a descriptive title or short context note...',
+  },
+};
 
 export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
   const [currentTab, setCurrentTab] = React.useState<VaultTab>('Overview');
@@ -70,8 +111,17 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   const displayName = identity?.fullName?.trim() || 'Vault User';
-  const displayEmail = identity?.email?.trim() || 'your-vault@aether.local';
+  const displayEmail = identity?.email?.trim() || 'your-vault@memora.local';
   const avatarLetter = displayName.charAt(0).toUpperCase() || 'V';
+  const activeCaptureCopy = captureCopy[captureType];
+  const currentSectionLabel =
+    currentTab === 'Overview'
+      ? 'Knowledge Workspace'
+      : currentTab === 'Guide'
+        ? 'Vault Guide'
+        : currentTab === 'Chat'
+          ? 'AI Chat Search'
+          : `${currentTab} Library`;
 
   React.useEffect(() => {
     if (isRecording) {
@@ -512,23 +562,23 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
 
       <aside
         className={cn(
-          'bg-white border-r border-[#e5e5eb] flex flex-col justify-between shrink-0 transition-all duration-300 z-40 h-full',
+          'bg-white border-r border-[#e5e5eb] flex flex-col shrink-0 transition-all duration-300 z-40 h-full overflow-hidden',
           isSidebarOpen ? 'w-64 fixed inset-y-0 left-0 md:relative md:flex' : 'w-0 overflow-hidden border-r-0 !hidden'
         )}
       >
-        <div className="flex flex-col py-6 px-4 space-y-6">
+        <div className="flex-1 overflow-y-auto py-6 px-4 space-y-6">
           <div
             onClick={() => window.location.assign('/')}
-            className="flex items-center space-x-3 px-2.5 cursor-pointer group select-none"
+            className="px-2.5 cursor-pointer group select-none"
             title="Go inside Product Presentation / Landing Page"
           >
-            <div className="w-7 h-7 rounded-md bg-neutral-900 flex items-center justify-center text-white font-mono font-bold leading-none shadow-sm group-hover:bg-neutral-850 transition">
-              A
-            </div>
-            <div>
-              <span className="font-semibold text-neutral-900 block text-xs tracking-tight hover:underline">Aether Vault</span>
-              <span className="text-[10px] text-neutral-400 font-medium block">Personal AI Agent</span>
-            </div>
+            <BrandLockup
+              size="sm"
+              subtitle="AI SECOND BRAIN"
+              className="group-hover:opacity-90 transition"
+              titleClassName="text-[1.05rem]"
+              subtitleClassName="tracking-[0.22em]"
+            />
           </div>
 
           <button
@@ -580,20 +630,21 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
           </div>
         </div>
 
-        <div className="p-4 border-t border-[#e5e5eb] space-y-3">
+        <div className="mt-auto p-4 border-t border-[#e5e5eb] space-y-3 bg-white">
           <button
             onClick={() => setCurrentTab('Guide')}
             className={cn(
-              'w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-lg transition text-left',
+              'w-full px-3 py-2 text-xs font-medium rounded-lg transition text-left',
               currentTab === 'Guide' ? 'bg-neutral-100 text-neutral-950 font-bold' : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900'
             )}
           >
-            <HelpCircle className="w-4 h-4" />
             <span>Vault Guide tour</span>
           </button>
 
-          <div className="flex items-center space-x-3 px-2 py-1.5 text-left border border-neutral-200/55 rounded-xl bg-neutral-50/50">
-            <div className="w-7 h-7 rounded-full bg-neutral-800 text-white flex items-center justify-center font-bold text-xs">{avatarLetter}</div>
+          <div className="flex items-center space-x-3 px-2 py-1.5 text-left border border-neutral-200/55 rounded-xl bg-neutral-50/50 min-w-0">
+            <div className="w-9 h-9 rounded-full bg-neutral-900 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-sm">
+              {avatarLetter}
+            </div>
             <div className="min-w-0">
               <span className="text-xs font-semibold text-neutral-800 block truncate leading-none">{displayName}</span>
               <span className="text-[10px] text-neutral-400 block truncate font-mono">{displayEmail}</span>
@@ -603,8 +654,8 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
       </aside>
 
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white border-b border-[#e5e5eb] h-14 shrink-0 flex items-center justify-between px-4 sm:px-6 z-10 select-none">
-          <div className="flex items-center space-x-3 sm:space-x-6">
+        <header className="bg-white border-b border-[#e5e5eb] h-14 shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 z-10 select-none">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
             <button
               onClick={() => setIsSidebarOpen((prev) => !prev)}
               className="p-1.5 rounded-lg border border-neutral-200 text-neutral-600 hover:border-neutral-900 hover:text-neutral-900 transition"
@@ -614,19 +665,35 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
               <PanelLeft className="w-4 h-4" />
             </button>
 
-            <div className="hidden sm:flex items-center space-x-2 text-[10px] font-bold font-mono uppercase tracking-widest text-neutral-900">
-              <PanelLeft className="w-4 h-4" />
-              <span>{currentTab === 'Overview' ? 'Aether Brain' : `${currentTab} library`}</span>
+            <div className="hidden lg:flex items-center gap-4 min-w-0 shrink-0">
+              {!isSidebarOpen && (
+                <>
+                  <BrandLockup
+                    size="sm"
+                    logoClassName="h-10 w-10 rounded-[14px]"
+                    titleClassName="text-[0.98rem]"
+                    subtitleClassName="text-[0.5rem] tracking-[0.24em]"
+                  />
+                  <div className="h-8 w-px bg-neutral-200" />
+                </>
+              )}
+              <span className="text-[10px] font-bold font-mono uppercase tracking-widest text-neutral-700 whitespace-nowrap">
+                {currentSectionLabel}
+              </span>
             </div>
 
-            <div className="relative">
+            <div className="hidden sm:flex lg:hidden items-center text-[10px] font-bold font-mono uppercase tracking-widest text-neutral-900 whitespace-nowrap shrink-0">
+              <span>{currentSectionLabel}</span>
+            </div>
+
+            <div className="relative flex-1 min-w-[180px] max-w-[720px]">
               <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder="Search concepts, source tags..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-56 sm:w-80 lg:w-[480px] rounded-xl border border-neutral-200 bg-neutral-50 pl-10 pr-14 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:bg-white transition"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 pl-10 pr-14 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:bg-white transition"
               />
               {searchQuery && (
                 <button onClick={() => setSearchQuery('')} className="absolute right-2.5 text-[10px] text-neutral-400 hover:text-neutral-900">
@@ -636,7 +703,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
             </div>
           </div>
 
-          <div className="flex items-center space-x-2 md:space-x-4">
+          <div className="flex items-center space-x-2 md:space-x-4 shrink-0">
             <button onClick={() => setShowCaptureModal(true)} className="sm:hidden bg-neutral-900 text-white p-1.5 rounded-lg flex items-center" title="Add knowledge element">
               <Plus className="w-4 h-4" />
             </button>
@@ -667,10 +734,10 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                 <div className="inline-block bg-neutral-150 text-neutral-800 text-[10px] font-extrabold px-2 py-0.5 rounded font-mono border border-neutral-300">
                   PRODUCT TOUR
                 </div>
-                <h2 className="text-3xl font-bold tracking-tight text-neutral-900">Aether Vault Introduction</h2>
+                <h2 className="text-3xl font-bold tracking-tight text-neutral-900">Memora Introduction</h2>
                 <p className="text-neutral-500 text-sm leading-relaxed max-w-2xl">
-                  Aether Vault is an AI-powered personal vault designed specifically for research and high-volume indexing of YouTube
-                  lectures, tweets, PDFs, and notes. No gimmicks, beautiful minimalist utility.
+                  Memora is an AI-powered personal vault designed specifically for research and high-volume indexing of YouTube
+                  lectures, social links, PDFs, and notes. No gimmicks, beautiful minimalist utility.
                 </p>
               </div>
 
@@ -747,7 +814,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                 <div className="bg-white border-b border-neutral-200 py-3.5 px-6 flex justify-between items-center shrink-0">
                   <div className="flex items-center space-x-2">
                     <span className="w-2 h-2 bg-emerald-550 rounded-full" />
-                    <span className="text-xs font-bold text-neutral-800 font-mono uppercase tracking-widest">Aether Neural Chat</span>
+                    <span className="text-xs font-bold text-neutral-800 font-mono uppercase tracking-widest">Memora Neural Chat</span>
                   </div>
 
                   <button onClick={handleClearHistory} className="text-[10px] font-mono hover:text-red-600 text-neutral-400 font-bold transition">
@@ -926,7 +993,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                 </div>
 
                 <div className="border-t border-neutral-150 pt-4 text-center select-none">
-                  <p className="text-[9px] text-neutral-400 font-mono leading-relaxed uppercase">Aether Vault Studio Edition &bull; TLS SECURE</p>
+                  <p className="text-[9px] text-neutral-400 font-mono leading-relaxed uppercase">Memora Studio Edition &bull; TLS SECURE</p>
                 </div>
               </div>
             </div>
@@ -952,13 +1019,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
               className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 overflow-hidden z-10 border border-neutral-200 text-left select-none"
             >
               <div className="flex justify-between items-center mb-5 border-b border-neutral-150 pb-3">
-                <div className="flex items-center space-x-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-neutral-100 font-bold text-neutral-900 flex items-center justify-center border border-neutral-200">A</div>
-                  <div>
-                    <h3 className="font-bold text-sm text-neutral-900 block font-mono uppercase tracking-wider">Add to Aether Vault</h3>
-                    <p className="text-[10px] text-neutral-400 font-medium">Use high-precision Gemini AI summaries</p>
-                  </div>
-                </div>
+                <BrandLockup size="sm" subtitle="AI SECOND BRAIN" />
                 <button onClick={() => setShowCaptureModal(false)} className="p-1 rounded-full text-neutral-400 hover:text-neutral-900 transition">
                   <X className="w-4 h-4" />
                 </button>
@@ -1011,14 +1072,14 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                       <label className="block text-[10px] font-bold font-mono text-neutral-400 uppercase tracking-widest mb-1.5">Supplementary Notes or URL (Optional)</label>
                       <input
                         type="url"
-                        placeholder="https://arxiv.org/abs/2401..."
+                        placeholder={captureCopy.PDFs.sourcePlaceholder}
                         value={captureUrl}
                         onChange={(e) => setCaptureUrl(e.target.value)}
                         className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg text-xs placeholder-neutral-400 focus:bg-white focus:outline-none focus:border-neutral-950 transition mb-2"
                       />
                       <textarea
                         rows={2}
-                        placeholder="Any additional instructions or specific topics to focus on..."
+                        placeholder={captureCopy.PDFs.textPlaceholder}
                         value={captureContent}
                         onChange={(e) => setCaptureContent(e.target.value)}
                         className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg text-xs placeholder-neutral-400 focus:bg-white focus:outline-none focus:border-neutral-950 transition"
@@ -1085,7 +1146,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                       <label className="block text-[10px] font-bold font-mono text-neutral-400 uppercase tracking-widest mb-1.5">Title or Brief Notes</label>
                       <input
                         type="text"
-                        placeholder="Give this voice memo a descriptive title (optional)..."
+                        placeholder={captureCopy['Voice Notes'].textPlaceholder}
                         value={captureContent}
                         onChange={(e) => setCaptureContent(e.target.value)}
                         className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg text-xs placeholder-neutral-400 focus:bg-white focus:outline-none focus:border-neutral-950 transition"
@@ -1095,10 +1156,12 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                 ) : (
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-[10px] font-bold font-mono text-neutral-400 uppercase tracking-widest mb-1.5">Source Link (Optional for Notes)</label>
+                      <label className="block text-[10px] font-bold font-mono text-neutral-400 uppercase tracking-widest mb-1.5">
+                        {activeCaptureCopy.sourceLabel}
+                      </label>
                       <input
                         type="url"
-                        placeholder="https://example.com/supplychain-article"
+                        placeholder={activeCaptureCopy.sourcePlaceholder}
                         value={captureUrl}
                         onChange={(e) => setCaptureUrl(e.target.value)}
                         className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg text-xs placeholder-neutral-400 focus:bg-white focus:outline-none focus:border-neutral-950 transition"
@@ -1106,10 +1169,12 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-bold font-mono text-neutral-400 uppercase tracking-widest mb-1.5">Text paragraphs, quotes or transcripts</label>
+                      <label className="block text-[10px] font-bold font-mono text-neutral-400 uppercase tracking-widest mb-1.5">
+                        {activeCaptureCopy.textLabel}
+                      </label>
                       <textarea
                         rows={4}
-                        placeholder="Paste paragraphs, paper quotes or fleeting thoughts here..."
+                        placeholder={activeCaptureCopy.textPlaceholder}
                         value={captureContent}
                         onChange={(e) => setCaptureContent(e.target.value)}
                         className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg text-xs placeholder-neutral-400 focus:bg-white focus:outline-none focus:border-neutral-950 transition"

@@ -1,5 +1,6 @@
-import { Brain, LockKeyhole, UserRound } from 'lucide-react';
+import { LockKeyhole, UserRound } from 'lucide-react';
 import { login, signup } from './actions';
+import { BrandLockup } from '../_components/brand-lockup';
 
 export default async function LoginPage({
   searchParams,
@@ -12,9 +13,8 @@ export default async function LoginPage({
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#f7f7f3,_#ffffff_55%)] text-neutral-950">
       <div className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center px-6 py-12 lg:flex-row lg:items-center lg:gap-16">
         <section className="max-w-xl space-y-6">
-          <div className="inline-flex items-center gap-3 rounded-full border border-neutral-200 bg-white/80 px-4 py-2 text-xs font-bold uppercase tracking-[0.24em] text-neutral-500 shadow-sm">
-            <Brain className="h-4 w-4 text-neutral-900" />
-            Aether Vault
+          <div className="inline-flex rounded-[26px] border border-neutral-200 bg-white/90 px-4 py-3 shadow-sm">
+            <BrandLockup size="sm" />
           </div>
           <div className="space-y-4">
             <h1 className="text-4xl font-black tracking-tight text-neutral-950 sm:text-5xl">
@@ -64,7 +64,7 @@ export default async function LoginPage({
                 id="fullName"
                 name="fullName"
                 type="text"
-                placeholder="Aether User"
+                placeholder="Memora User"
                 className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-900 outline-none transition focus:border-neutral-900 focus:bg-white"
               />
             </div>

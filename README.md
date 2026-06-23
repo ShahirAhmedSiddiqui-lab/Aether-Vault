@@ -1,4 +1,4 @@
-# Aether Vault
+# Memora - AI Second Brain 
 
 Next.js app for capturing articles, videos, PDFs, social links, and voice notes into a personal AI knowledge vault.
 
