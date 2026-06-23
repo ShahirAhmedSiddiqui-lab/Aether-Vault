@@ -1,0 +1,13 @@
+node_modules/
+.next/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+.agents/
+.codex/
+PLAN.md
+skills-lock.json
+aether_vault_db.json
+metadata.json
