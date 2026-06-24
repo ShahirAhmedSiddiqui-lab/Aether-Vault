@@ -56,6 +56,27 @@ export interface ChatReferencedSource {
   type: string;
 }
 
+export type BrainResponseStyle = 'concise' | 'balanced' | 'detailed';
+export type DefaultVoiceSpeed = 1 | 1.25 | 1.5;
+
+export interface UserPreferences {
+  brainResponseStyle: BrainResponseStyle;
+  defaultVoiceSpeed: DefaultVoiceSpeed;
+  reduceMotion: boolean;
+  compactMode: boolean;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  fullName?: string;
+  avatarPath?: string;
+  avatarUrl?: string;
+  preferences: UserPreferences;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ChatSession {
   id: string;
   title: string;

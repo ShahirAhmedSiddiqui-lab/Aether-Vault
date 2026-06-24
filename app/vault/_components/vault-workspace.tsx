@@ -30,10 +30,13 @@ import { BrandLockup } from '@/app/_components/brand-lockup';
 import { FormattedMarkdown } from './formatted-markdown';
 import { VaultContentPanel } from './vault-content-panel';
 import { VaultDetailPanel } from './vault-detail-panel';
+import Link from 'next/link';
 
 type VaultIdentity = {
   fullName?: string;
   email?: string;
+  avatarUrl?: string;
+  defaultVoiceSpeed?: number;
 };
 
 type ConfirmDialogState = {
@@ -135,7 +138,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
   const [recorderBlob, setRecorderBlob] = React.useState<Blob | null>(null);
   const [recorderUrl, setRecorderUrl] = React.useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
-  const [voiceSpeed, setVoiceSpeed] = React.useState(1.0);
+  const [voiceSpeed, setVoiceSpeed] = React.useState(identity?.defaultVoiceSpeed ?? 1.0);
   const [inlineInput, setInlineInput] = React.useState('');
   const [isInlineGenerating, setIsInlineGenerating] = React.useState(false);
   const [localAskQuery, setLocalAskQuery] = React.useState('');
@@ -1074,8 +1077,8 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
             <span>Quick Capture</span>
           </button>
 
-          <div className="space-y-1">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 px-3 py-1 selection:bg-transparent">Vault Contents</div>
+            <div className="space-y-1">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 px-3 py-1 selection:bg-transparent">Vault Contents</div>
             <nav className="space-y-0.5">
               {categories.map((cat) => {
                 const Icon = cat.icon;
@@ -1133,9 +1136,27 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
             <span>Vault Guide tour</span>
           </button>
 
+          <div className="grid grid-cols-2 gap-2">
+            <Link
+              href="/profile"
+              className="rounded-lg border border-neutral-200 px-3 py-2 text-xs font-semibold text-neutral-700 transition hover:border-neutral-900 hover:text-neutral-950"
+            >
+              Profile
+            </Link>
+            <Link
+              href="/settings"
+              className="rounded-lg border border-neutral-200 px-3 py-2 text-xs font-semibold text-neutral-700 transition hover:border-neutral-900 hover:text-neutral-950"
+            >
+              Settings
+            </Link>
+          </div>
+
           <div className="flex items-center space-x-3 px-2 py-1.5 text-left border border-neutral-200/55 rounded-xl bg-neutral-50/50 min-w-0">
-            <div className="w-9 h-9 rounded-full bg-neutral-900 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-sm">
-              {avatarLetter}
+            <div
+              className="w-9 h-9 rounded-full bg-neutral-900 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-sm"
+              style={identity?.avatarUrl ? { backgroundImage: `url(${identity.avatarUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+            >
+              {!identity?.avatarUrl ? avatarLetter : null}
             </div>
             <div className="min-w-0">
               <span className="text-xs font-semibold text-neutral-800 block truncate leading-none">{displayName}</span>

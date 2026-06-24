@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { LockKeyhole, UserRound } from 'lucide-react';
 import { login, signup } from './actions';
 import { BrandLockup } from '../_components/brand-lockup';
@@ -108,6 +109,12 @@ export default async function LoginPage({
                 placeholder="Minimum 6 characters"
                 className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-900 outline-none transition focus:border-neutral-900 focus:bg-white"
               />
+            </div>
+
+            <div className="flex justify-end">
+              <Link href="/reset-password" className="text-xs font-semibold text-neutral-500 transition hover:text-neutral-950">
+                Forgot your password?
+              </Link>
             </div>
 
             <div className="grid gap-3 pt-2 sm:grid-cols-2">
