@@ -3,6 +3,7 @@ import {
   ChatMessage,
   ChatReferencedSource,
   Flashcard,
+  ItemCaptureKind,
   ItemPreviewMetadata,
   KnowledgeItem,
   formatRelativeDate,
@@ -19,6 +20,7 @@ type KnowledgeItemRow = {
   summary: string;
   extracted_text: string | null;
   item_type: KnowledgeItem['type'];
+  capture_kind: ItemCaptureKind | null;
   processing_status: KnowledgeItem['processingStatus'];
   failure_reason: string | null;
   tags: string[] | null;
@@ -131,10 +133,20 @@ function normalizePreviewMetadata(value: unknown): ItemPreviewMetadata | undefin
     previewMetadata.byteSize = metadata.byteSize;
   }
 
+  if (typeof metadata.captureKind === 'string') {
+    previewMetadata.captureKind = metadata.captureKind as ItemCaptureKind;
+  }
+
   return Object.keys(previewMetadata).length > 0 ? previewMetadata : undefined;
 }
 
 export function mapKnowledgeItem(row: KnowledgeItemRow, fileUrl?: string): KnowledgeItem {
+  const previewMetadata = normalizePreviewMetadata(row.preview_metadata);
+  const resolvedImageUrl =
+    row.item_type === 'Images' && fileUrl
+      ? fileUrl
+      : row.image_url ?? previewMetadata?.thumbnailUrl ?? undefined;
+
   return {
     id: row.id,
     title: row.title,
@@ -142,6 +154,7 @@ export function mapKnowledgeItem(row: KnowledgeItemRow, fileUrl?: string): Knowl
     extractedText: row.extracted_text ?? undefined,
     summary: row.summary,
     type: row.item_type,
+    captureKind: row.capture_kind ?? undefined,
     processingStatus: row.processing_status,
     failureReason: row.failure_reason ?? undefined,
     tags: row.tags ?? [],
@@ -152,9 +165,9 @@ export function mapKnowledgeItem(row: KnowledgeItemRow, fileUrl?: string): Knowl
     source: row.source,
     author: row.author ?? undefined,
     url: row.url ?? undefined,
-    previewMetadata: normalizePreviewMetadata(row.preview_metadata),
+    previewMetadata,
     flashcards: normalizeFlashcards(row.flashcards),
-    imageUrl: row.image_url ?? undefined,
+    imageUrl: resolvedImageUrl,
     readTime: row.read_time ?? undefined,
     isSynthesized: row.is_synthesized,
     bookmarked: row.bookmarked,

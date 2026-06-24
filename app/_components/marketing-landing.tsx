@@ -36,8 +36,8 @@ export function MarketingLanding() {
             Find it in seconds.
           </h1>
           <p className="text-sm md:text-base text-neutral-500 max-w-lg mx-auto leading-relaxed">
-            People save YouTube videos, social links, articles, PDFs, and notes - then lose them forever. Memora
-            listens, transcribes, and maps your knowledge instantly.
+            People save YouTube videos, social links, articles, PDFs, screenshots, and notes - then lose
+            them forever. Memora listens, transcribes, and maps your knowledge instantly.
           </p>
         </div>
 
@@ -69,8 +69,8 @@ export function MarketingLanding() {
             <div>
               <h3 className="font-extrabold text-neutral-900 text-xs tracking-wider uppercase font-mono">1. Auto-Synthesis</h3>
               <p className="text-neutral-500 text-[11px] leading-relaxed mt-1">
-                Gemini 3.5 inspects links, PDFs, and audio recordings, drawing raw main takeaways, executive summaries,
-                and action steps in real-time.
+                Gemini 2.5 Flash inspects links, PDFs, screenshots, and audio recordings, drawing raw main
+                takeaways, executive summaries, and action steps in real-time.
               </p>
             </div>
           </div>
@@ -106,6 +106,7 @@ export function MarketingLanding() {
           <span>SAVING OPTIONS:</span>
           <span className="text-neutral-900 font-bold">&bull; YouTube videos</span>
           <span className="text-neutral-900 font-bold">&bull; PDF Papers</span>
+          <span className="text-neutral-900 font-bold">&bull; Screenshots & images</span>
           <span className="text-neutral-900 font-bold">&bull; Voice Notes / MP3</span>
           <span className="text-neutral-900 font-bold">&bull; Social links</span>
           <span className="text-neutral-900 font-bold">&bull; Articles & web-text</span>
@@ -113,7 +114,7 @@ export function MarketingLanding() {
       </main>
 
       <footer className="py-6 border-t border-neutral-100 text-center text-[10px] text-neutral-400 font-mono tracking-widest shrink-0">
-        MEMORA CORE &copy; {new Date().getFullYear()} &bull; POWERED BY GOOGLE GEMINI 3.5 FLASH
+        MEMORA CORE &copy; {new Date().getFullYear()} &bull; POWERED BY GOOGLE GEMINI 2.5 FLASH
       </footer>
     </div>
   );

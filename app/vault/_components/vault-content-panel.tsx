@@ -2,14 +2,14 @@
 
 import * as React from 'react';
 import { motion } from 'motion/react';
-import { Activity, ArrowRight, Bookmark, Inbox, Trash2, X } from 'lucide-react';
+import { Activity, ArrowRight, Bookmark, Inbox, LoaderCircle, RefreshCw, Trash2, X } from 'lucide-react';
 import { KnowledgeItem } from '@/lib/db';
 import { matchesSearch } from '@/lib/supabase/vault';
 import { cn } from '@/lib/utils';
 import { FormattedMarkdown } from './formatted-markdown';
 
 type VaultContentPanelProps = {
-  currentTab: 'Overview' | 'Articles' | 'Videos' | 'PDFs' | 'Social Links' | 'Voice Notes';
+  currentTab: 'Overview' | 'Articles' | 'Videos' | 'PDFs' | 'Social Links' | 'Voice Notes' | 'Images';
   items: KnowledgeItem[];
   searchQuery: string;
   selectedItemId: string;
@@ -26,6 +26,7 @@ type VaultContentPanelProps = {
   onSelectItem: (id: string) => void;
   onToggleBookmark: (id: string, currentStatus: boolean, event?: React.MouseEvent) => void;
   onDeleteItem: (id: string, event: React.MouseEvent) => void;
+  onRetryItem: (id: string, event: React.MouseEvent) => void;
 };
 
 export function VaultContentPanel({
@@ -46,6 +47,7 @@ export function VaultContentPanel({
   onSelectItem,
   onToggleBookmark,
   onDeleteItem,
+  onRetryItem,
 }: VaultContentPanelProps) {
   const filteredItems = React.useMemo(
     () =>
@@ -56,6 +58,36 @@ export function VaultContentPanel({
       }),
     [currentTab, items, searchQuery]
   );
+
+  const weeklyActivity = React.useMemo(() => {
+    const today = new Date();
+    const labels = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const dailyCounts = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(today);
+      date.setHours(0, 0, 0, 0);
+      date.setDate(today.getDate() - (6 - index));
+
+      const nextDate = new Date(date);
+      nextDate.setDate(date.getDate() + 1);
+
+      const count = items.filter((item) => {
+        const createdAt = new Date(item.createdAtDate);
+        return createdAt >= date && createdAt < nextDate;
+      }).length;
+
+      return {
+        label: labels[date.getDay()],
+        count,
+      };
+    });
+
+    const maxCount = dailyCounts.reduce((currentMax, entry) => Math.max(currentMax, entry.count), 0);
+
+    return dailyCounts.map((entry) => ({
+      ...entry,
+      height: maxCount === 0 ? 8 : Math.max(8, Math.round((entry.count / maxCount) * 100)),
+    }));
+  }, [items]);
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto px-6 py-6 border-r border-neutral-200/80 bg-[#fafafc]">
@@ -172,6 +204,8 @@ export function VaultContentPanel({
                         ? 'bg-indigo-50 text-indigo-600 border-indigo-100'
                         : item.type === 'PDFs'
                           ? 'bg-purple-50 text-purple-600 border-purple-100'
+                          : item.type === 'Images'
+                            ? 'bg-amber-50 text-amber-700 border-amber-100'
                           : item.type === 'Social Links'
                             ? 'bg-sky-50 text-sky-600 border-sky-100'
                             : 'bg-[#f0fdf4] text-emerald-600 border-emerald-100'
@@ -181,6 +215,15 @@ export function VaultContentPanel({
                 </span>
 
                 <div className="flex items-center space-x-1.5 opacity-100 transition shrink-0 z-10">
+                  {item.processingStatus === 'failed' && (
+                    <button
+                      onClick={(e) => onRetryItem(item.id, e)}
+                      className="text-amber-600 hover:text-amber-700 p-0.5"
+                      title="Retry processing"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => onToggleBookmark(item.id, !!item.bookmarked, e)}
                     className="text-neutral-400 hover:text-neutral-900 p-0.5"
@@ -202,6 +245,24 @@ export function VaultContentPanel({
                 <h3 className="font-bold text-xs text-neutral-900 leading-snug line-clamp-2">{item.title}</h3>
                 <p className="text-neutral-500 text-[11px] leading-relaxed line-clamp-3">{item.summary}</p>
               </div>
+
+              {item.processingStatus !== 'ready' && (
+                <div
+                  className={cn(
+                    'mt-3 flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[10px] font-mono',
+                    item.processingStatus === 'failed'
+                      ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                      : 'bg-neutral-100 text-neutral-600 border border-neutral-200'
+                  )}
+                >
+                  {item.processingStatus === 'failed' ? (
+                    <RefreshCw className="w-3 h-3" />
+                  ) : (
+                    <LoaderCircle className="w-3 h-3 animate-spin" />
+                  )}
+                  <span>{item.processingStatus === 'failed' ? 'Processing failed. Retry available.' : 'Ingestion in progress.'}</span>
+                </div>
+              )}
 
               <div className="flex flex-wrap items-center gap-1.5 pt-4 mt-auto border-t border-neutral-105/10">
                 <span className="text-[10px] text-neutral-400 font-mono tracking-widest uppercase shrink-0">{item.source}</span>
@@ -234,29 +295,25 @@ export function VaultContentPanel({
             <div className="space-y-1 md:w-1/3">
               <div className="text-2xl font-bold tracking-tight text-neutral-900 leading-none">{items.length}</div>
               <p className="text-[10px] text-neutral-400 font-mono uppercase tracking-wider">active second mind assets</p>
-              <p className="text-[11px] text-neutral-500 max-w-xs">Dynamic count of research videos, PDFs, and saved social links indexed.</p>
+              <p className="text-[11px] text-neutral-500 max-w-xs">Dynamic count of notes, links, PDFs, images, audio, and saved research assets indexed.</p>
             </div>
 
             <div className="flex-1 w-full bg-neutral-50/50 p-3 rounded-lg flex flex-col justify-between">
               <div className="w-full flex justify-between items-end h-12 px-1">
-                {[35, 60, 42, 90, 50, 75, 40].map((h, i) => (
-                  <div key={i} className="flex flex-col items-center flex-1">
+                {weeklyActivity.map((entry) => (
+                  <div key={entry.label} className="flex flex-col items-center flex-1">
                     <div
                       className="w-3 rounded-t-sm transition-all duration-300 bg-neutral-200 hover:bg-neutral-900 min-h-[4px]"
-                      style={{ height: `${h}%` }}
-                      title={`${Math.round(h / 10)} additions`}
+                      style={{ height: `${entry.height}%` }}
+                      title={`${entry.count} addition${entry.count === 1 ? '' : 's'}`}
                     />
                   </div>
                 ))}
               </div>
               <div className="flex justify-between text-[8px] font-mono leading-none tracking-widest text-neutral-400 px-1 border-t border-neutral-150 pt-2 mt-1">
-                <span>MON</span>
-                <span>TUE</span>
-                <span>WED</span>
-                <span>THU</span>
-                <span>FRI</span>
-                <span>SAT</span>
-                <span>SUN</span>
+                {weeklyActivity.map((entry) => (
+                  <span key={entry.label}>{entry.label}</span>
+                ))}
               </div>
             </div>
           </div>

@@ -1,8 +1,10 @@
-import { KnowledgeItem } from '@/lib/db';
+import { ItemCaptureKind, KnowledgeItem } from '@/lib/db';
 
 export const ITEM_PROCESSING_STATUSES = ['pending', 'ready', 'failed', 'trashed'] as const;
+export const ITEM_CAPTURE_KINDS = ['url', 'note', 'pdf', 'image', 'audio'] as const;
 
 export type ItemProcessingStatus = (typeof ITEM_PROCESSING_STATUSES)[number];
+export type SupportedItemCaptureKind = (typeof ITEM_CAPTURE_KINDS)[number];
 
 export type ItemPreviewMetadata = {
   thumbnailUrl?: string;
@@ -12,6 +14,7 @@ export type ItemPreviewMetadata = {
   fileName?: string;
   mimeType?: string;
   byteSize?: number;
+  captureKind?: ItemCaptureKind;
 };
 
 type UploadedFileData = {
@@ -33,6 +36,10 @@ export function inferItemType(
     return 'PDFs';
   }
 
+  if (fileData?.mimeType?.startsWith('image/')) {
+    return 'Images';
+  }
+
   if (fileData?.mimeType?.startsWith('audio/')) {
     return 'Voice Notes';
   }
@@ -42,6 +49,32 @@ export function inferItemType(
   }
 
   return 'Articles';
+}
+
+export function inferCaptureKind({
+  fileData,
+  url,
+}: {
+  fileData?: UploadedFileData;
+  url?: string;
+}): SupportedItemCaptureKind {
+  if (fileData?.mimeType === 'application/pdf') {
+    return 'pdf';
+  }
+
+  if (fileData?.mimeType?.startsWith('image/')) {
+    return 'image';
+  }
+
+  if (fileData?.mimeType?.startsWith('audio/')) {
+    return 'audio';
+  }
+
+  if (url?.trim()) {
+    return 'url';
+  }
+
+  return 'note';
 }
 
 export function getInitialItemTitle({
@@ -126,6 +159,8 @@ export function buildPreviewMetadata({
     metadata.byteSize = fileData.size;
   }
 
+  metadata.captureKind = inferCaptureKind({ fileData, url });
+
   if (url && isYouTubeUrl(url)) {
     metadata.provider = 'youtube';
   }
@@ -162,6 +197,31 @@ export function getStoredItemContent({
 
 export function getFailureSummary(type: KnowledgeItem['type']) {
   return `This ${type.toLowerCase()} capture could not be processed yet. You can keep it in your vault and retry processing later.`;
+}
+
+export function getFileExtension(fileName: string | undefined, mimeType: string | undefined) {
+  const fromName = fileName?.split('.').pop()?.toLowerCase();
+  if (fromName) {
+    return fromName;
+  }
+
+  const lookup: Record<string, string> = {
+    'application/pdf': 'pdf',
+    'audio/mpeg': 'mp3',
+    'audio/mp3': 'mp3',
+    'audio/webm': 'webm',
+    'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
+    'audio/mp4': 'm4a',
+    'audio/m4a': 'm4a',
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+  };
+
+  return lookup[mimeType ?? ''] ?? 'bin';
 }
 
 export function getRestoredStatus(item: {

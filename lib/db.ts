@@ -6,6 +6,7 @@ export interface Flashcard {
 }
 
 export type ItemProcessingStatus = 'pending' | 'ready' | 'failed' | 'trashed';
+export type ItemCaptureKind = 'url' | 'note' | 'pdf' | 'image' | 'audio';
 
 export interface ItemPreviewMetadata {
   thumbnailUrl?: string;
@@ -15,6 +16,7 @@ export interface ItemPreviewMetadata {
   fileName?: string;
   mimeType?: string;
   byteSize?: number;
+  captureKind?: ItemCaptureKind;
 }
 
 export interface KnowledgeItem {
@@ -23,7 +25,8 @@ export interface KnowledgeItem {
   content: string;
   extractedText?: string;
   summary: string;
-  type: 'Videos' | 'Articles' | 'PDFs' | 'Social Links' | 'Voice Notes';
+  type: 'Videos' | 'Articles' | 'PDFs' | 'Social Links' | 'Voice Notes' | 'Images';
+  captureKind?: ItemCaptureKind;
   processingStatus: ItemProcessingStatus;
   failureReason?: string;
   tags: string[];

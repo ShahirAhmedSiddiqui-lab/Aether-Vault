@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
 import { VaultWorkspace } from './_components/vault-workspace';
 
 export default async function VaultPage() {
@@ -6,6 +7,10 @@ export default async function VaultPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect('/login?message=Please%20log%20in%20to%20access%20your%20vault.');
+  }
 
   const identity = {
     fullName:

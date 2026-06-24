@@ -59,13 +59,13 @@ const getAiClient = () => {
 export async function summarizeAndExtract(
   content: string,
   sourceUrl?: string,
-  customType?: 'Videos' | 'Articles' | 'PDFs' | 'Social Links' | 'Voice Notes',
+  customType?: 'Videos' | 'Articles' | 'PDFs' | 'Social Links' | 'Voice Notes' | 'Images',
   fileData?: UploadedFileData
 ): Promise<{
   title: string;
   summary: string;
   keyPoints: string[];
-  type: 'Videos' | 'Articles' | 'PDFs' | 'Social Links' | 'Voice Notes';
+  type: 'Videos' | 'Articles' | 'PDFs' | 'Social Links' | 'Voice Notes' | 'Images';
   tags: string[];
   readTime: string;
   source: string;
@@ -88,7 +88,7 @@ Extract/generate:
 1. A concise factual title grounded in the source.
 2. A precise executive summary in 2-3 sentences using only evidence from the source.
 3. 3-5 key points as short bullet-style statements.
-4. Classify it into one of these types: "Videos", "Articles", "PDFs", "Social Links", "Voice Notes".
+4. Classify it into one of these types: "Videos", "Articles", "PDFs", "Social Links", "Voice Notes", "Images".
 5. A list of 2-4 relevant high-level category tags.
 6. An estimated read time (or watch/listen time when appropriate).
 7. The source network or publication domain.
@@ -146,7 +146,7 @@ ${fileContext}`;
             },
             type: {
               type: Type.STRING,
-              enum: ['Videos', 'Articles', 'PDFs', 'Social Links', 'Voice Notes']
+              enum: ['Videos', 'Articles', 'PDFs', 'Social Links', 'Voice Notes', 'Images']
             },
             tags: {
               type: Type.ARRAY,
@@ -180,7 +180,7 @@ ${fileContext}`;
       title?: string;
       summary?: string;
       keyPoints?: string[];
-      type?: 'Videos' | 'Articles' | 'PDFs' | 'Social Links' | 'Voice Notes';
+      type?: 'Videos' | 'Articles' | 'PDFs' | 'Social Links' | 'Voice Notes' | 'Images';
       tags?: string[];
       readTime?: string;
       source?: string;
@@ -327,7 +327,7 @@ function classifyAttachment(mimeType?: string) {
 function buildFallbackSummary(
   content: string,
   sourceUrl?: string,
-  customType?: 'Videos' | 'Articles' | 'PDFs' | 'Social Links' | 'Voice Notes'
+  customType?: 'Videos' | 'Articles' | 'PDFs' | 'Social Links' | 'Voice Notes' | 'Images'
 ) {
   const mockTitle = content.split('\n')[0]?.substring(0, 60) || 'New Raw Save';
   let source = 'Personal Note';

@@ -1,8 +1,10 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
 import * as React from 'react';
 import { motion } from 'motion/react';
-import { Bookmark, BookOpen, ExternalLink, Layers, Play, Trash2, Volume2 } from 'lucide-react';
+import { Bookmark, BookOpen, ExternalLink, ImageIcon, Layers, LoaderCircle, Play, RefreshCw, Trash2, Volume2 } from 'lucide-react';
 import { KnowledgeItem } from '@/lib/db';
 import { cn } from '@/lib/utils';
 
@@ -15,6 +17,7 @@ type VaultDetailPanelProps = {
   onFlipCard: (id: string | null) => void;
   onToggleBookmark: (id: string, currentStatus: boolean, event?: React.MouseEvent) => void;
   onDeleteItem: (id: string, event: React.MouseEvent) => void;
+  onRetryItem: (id: string, event: React.MouseEvent) => void;
 };
 
 export function VaultDetailPanel({
@@ -26,6 +29,7 @@ export function VaultDetailPanel({
   onFlipCard,
   onToggleBookmark,
   onDeleteItem,
+  onRetryItem,
 }: VaultDetailPanelProps) {
   if (!currentItem) {
     return (
@@ -72,10 +76,45 @@ export function VaultDetailPanel({
                 <Trash2 className="w-3 h-3" />
                 <span>Delete</span>
               </button>
+              {currentItem.processingStatus === 'failed' && (
+                <button
+                  onClick={(e) => onRetryItem(currentItem.id, e)}
+                  className="text-amber-700 hover:text-amber-800 flex items-center space-x-0.5 text-[10px] font-mono font-bold"
+                  title="Retry processing"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Retry</span>
+                </button>
+              )}
             </div>
           </div>
           <h3 className="font-extrabold text-neutral-900 text-sm leading-snug">{currentItem.title}</h3>
         </div>
+
+        {currentItem.processingStatus !== 'ready' && (
+          <div
+            className={cn(
+              'border rounded-xl p-4 space-y-1.5',
+              currentItem.processingStatus === 'failed'
+                ? 'bg-amber-50 border-amber-100 text-amber-800'
+                : 'bg-neutral-50 border-neutral-200 text-neutral-700'
+            )}
+          >
+            <div className="flex items-center gap-2 text-[10px] font-bold font-mono uppercase tracking-widest">
+              {currentItem.processingStatus === 'failed' ? (
+                <RefreshCw className="w-3.5 h-3.5" />
+              ) : (
+                <LoaderCircle className="w-3.5 h-3.5 animate-spin" />
+              )}
+              <span>{currentItem.processingStatus === 'failed' ? 'Capture needs retry' : 'Capture is processing'}</span>
+            </div>
+            <p className="text-xs leading-relaxed">
+              {currentItem.processingStatus === 'failed'
+                ? currentItem.failureReason || 'The capture saved successfully, but synthesis did not finish.'
+                : 'The source asset is stored privately in your vault while the ingestion pipeline finishes.'}
+            </p>
+          </div>
+        )}
 
         <div className="bg-neutral-50 border border-neutral-200 p-4 rounded-xl space-y-2">
           <div className="text-[9px] font-bold font-mono tracking-widest uppercase text-neutral-500">EXECUTIVE TAKEAWAY</div>
@@ -247,9 +286,41 @@ export function VaultDetailPanel({
               </div>
             </div>
           )}
+
+          {currentItem.type === 'Images' && (
+            <div className="space-y-2">
+              {currentItem.fileUrl ? (
+                <div className="space-y-2">
+                  <div className="rounded-lg overflow-hidden border border-neutral-200 bg-white">
+                    <img
+                      src={currentItem.fileUrl}
+                      alt={currentItem.title}
+                      className="w-full max-h-72 object-contain bg-neutral-50"
+                    />
+                  </div>
+                  <div className="flex justify-between items-center pt-1 border-t border-neutral-100">
+                    <span className="text-[9px] text-neutral-400 font-mono">Private image capture</span>
+                    <a
+                      href={currentItem.fileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[9px] font-mono hover:underline font-bold text-neutral-900"
+                    >
+                      Open full image
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-white border border-neutral-200 rounded-lg text-center font-mono space-y-1.5">
+                  <ImageIcon className="w-5 h-5 mx-auto text-neutral-400" />
+                  <span className="text-[10px] text-neutral-600 block font-semibold">Image capture saved</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {currentItem.imageUrl && !['Videos', 'PDFs', 'Voice Notes', 'Articles', 'Social Links'].includes(currentItem.type) && (
+        {currentItem.imageUrl && !['Videos', 'PDFs', 'Voice Notes', 'Articles', 'Social Links', 'Images'].includes(currentItem.type) && (
           <div className="relative h-24 w-full rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200/50">
             <img
               src={currentItem.imageUrl}

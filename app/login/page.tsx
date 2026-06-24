@@ -1,12 +1,23 @@
+import { redirect } from 'next/navigation';
 import { LockKeyhole, UserRound } from 'lucide-react';
 import { login, signup } from './actions';
 import { BrandLockup } from '../_components/brand-lockup';
+import { createClient } from '@/lib/supabase/server';
 
 export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ message?: string }>;
 }) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    redirect('/vault');
+  }
+
   const { message } = await searchParams;
 
   return (
@@ -21,8 +32,8 @@ export default async function LoginPage({
               Sign in to your private second brain.
             </h1>
             <p className="max-w-lg text-sm leading-7 text-neutral-600 sm:text-base">
-              Your notes, PDFs, voice memos, and AI summaries now live in Supabase with per-user auth
-              and private storage.
+              Your notes, PDFs, screenshots, voice memos, and AI summaries now live in Supabase with
+              per-user auth and private storage.
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -37,7 +48,8 @@ export default async function LoginPage({
               <UserRound className="mb-3 h-5 w-5 text-neutral-900" />
               <h2 className="text-sm font-bold text-neutral-950">Private file storage</h2>
               <p className="mt-2 text-sm leading-6 text-neutral-600">
-                PDFs and audio uploads are stored in a user-scoped Supabase bucket instead of local JSON.
+                PDFs, screenshots, and audio uploads are stored in a user-scoped Supabase bucket instead
+                of local JSON.
               </p>
             </div>
           </div>

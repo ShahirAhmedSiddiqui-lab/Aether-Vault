@@ -8,6 +8,7 @@ import {
   CheckCircle,
   FileText,
   Globe,
+  ImageIcon,
   Inbox,
   Layers,
   Mic,
@@ -33,7 +34,7 @@ type VaultIdentity = {
   email?: string;
 };
 
-type VaultTab = 'Overview' | 'Articles' | 'Videos' | 'PDFs' | 'Social Links' | 'Voice Notes' | 'Chat' | 'Guide';
+type VaultTab = 'Overview' | 'Articles' | 'Videos' | 'PDFs' | 'Social Links' | 'Voice Notes' | 'Images' | 'Chat' | 'Guide';
 
 const captureCopy: Record<
   Exclude<VaultTab, 'Overview' | 'Chat' | 'Guide'>,
@@ -62,6 +63,12 @@ const captureCopy: Record<
     textLabel: 'PDF Context Notes',
     textPlaceholder: 'Any additional instructions or specific topics to focus on...',
   },
+  Images: {
+    sourceLabel: 'Reference URL (Optional)',
+    sourcePlaceholder: 'https://example.com/reference-shot',
+    textLabel: 'Screenshot Notes or OCR Context',
+    textPlaceholder: 'Add any notes about what this screenshot contains or why it matters...',
+  },
   'Social Links': {
     sourceLabel: 'Social Link',
     sourcePlaceholder: 'https://x.com/... or https://linkedin.com/...',
@@ -85,7 +92,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
   const [chatInput, setChatInput] = React.useState('');
   const [captureUrl, setCaptureUrl] = React.useState('');
   const [captureContent, setCaptureContent] = React.useState('');
-  const [captureType, setCaptureType] = React.useState<'Videos' | 'Articles' | 'PDFs' | 'Social Links' | 'Voice Notes'>('Articles');
+  const [captureType, setCaptureType] = React.useState<'Videos' | 'Articles' | 'PDFs' | 'Social Links' | 'Voice Notes' | 'Images'>('Articles');
   const [isGenerating, setIsGenerating] = React.useState(false);
   const [showCaptureModal, setShowCaptureModal] = React.useState(false);
   const [uploadFile, setUploadFile] = React.useState<File | null>(null);
@@ -155,6 +162,72 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
   const showToast = React.useCallback((message: string) => {
     setNotification(message);
     setTimeout(() => setNotification(null), 3000);
+  }, []);
+
+  const upsertItem = React.useCallback((nextItem: KnowledgeItem) => {
+    setItems((prev) => {
+      const existingIndex = prev.findIndex((item) => item.id === nextItem.id);
+
+      if (existingIndex === -1) {
+        return [nextItem, ...prev];
+      }
+
+      const updated = [...prev];
+      updated[existingIndex] = nextItem;
+      return updated;
+    });
+  }, []);
+
+  const refreshItem = React.useCallback(
+    async (itemId: string, fallbackTitle: string) => {
+      const delays = [1500, 4000];
+
+      for (const delay of delays) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+
+        try {
+          const res = await fetch(`/api/items/${itemId}`);
+          if (!res.ok) {
+            continue;
+          }
+
+          const updated = await res.json();
+          upsertItem(updated);
+
+          if (updated.processingStatus === 'ready') {
+            setSelectedItemId(updated.id);
+            showToast(`Finished processing "${updated.title}"`);
+            return;
+          }
+
+          if (updated.processingStatus === 'failed') {
+            setSelectedItemId(updated.id);
+            showToast(`Saved "${updated.title}", but AI processing failed.`);
+            return;
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      showToast(`Saved "${fallbackTitle}". Processing is still running in the background.`);
+    },
+    [showToast, upsertItem]
+  );
+
+  const resetCaptureState = React.useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
+    }
+    setIsRecording(false);
+    setCaptureUrl('');
+    setCaptureContent('');
+    setUploadFile(null);
+    setUploadFileBase64('');
+    setRecorderBlob(null);
+    setRecorderUrl(null);
+    setRecordingDuration(0);
   }, []);
 
   React.useEffect(() => {
@@ -329,23 +402,19 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
       }
 
       const newItem = await response.json();
-      setItems((prev) => [newItem, ...prev]);
+      upsertItem(newItem);
       setSelectedItemId(newItem.id);
       setShowCaptureModal(false);
-      setCaptureUrl('');
-      setCaptureContent('');
-      setUploadFile(null);
-      setUploadFileBase64('');
-      setRecorderBlob(null);
-      setRecorderUrl(null);
-      showToast(
-        newItem.processingStatus === 'failed'
-          ? `"${newItem.title}" was saved, but processing failed.`
-          : `Synthesized & saved "${newItem.title}"`
-      );
+      resetCaptureState();
+      if (newItem.processingStatus === 'failed') {
+        showToast(`Saved "${newItem.title}", but the upload could not be prepared for AI processing.`);
+      } else {
+        showToast(`Saved "${newItem.title}". Processing started.`);
+        void refreshItem(newItem.id, newItem.title);
+      }
     } catch (error) {
       console.error(error);
-      showToast('Failed to synthesize content.');
+      showToast('Failed to save capture.');
     } finally {
       setIsGenerating(false);
     }
@@ -364,8 +433,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url: isUrl ? inlineInput.trim() : undefined,
-          content: inlineInput.trim(),
-          type: 'Articles',
+          content: isUrl ? undefined : inlineInput.trim(),
         }),
       });
 
@@ -374,19 +442,41 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
       }
 
       const newItem = await response.json();
-      setItems((prev) => [newItem, ...prev]);
+      upsertItem(newItem);
       setSelectedItemId(newItem.id);
       setInlineInput('');
-      showToast(
-        newItem.processingStatus === 'failed'
-          ? `"${newItem.title}" was saved, but processing failed.`
-          : `Added to library: "${newItem.title}"`
-      );
+      if (newItem.processingStatus === 'failed') {
+        showToast(`Added "${newItem.title}", but the upload could not be prepared for AI processing.`);
+      } else {
+        showToast(`Added "${newItem.title}" to your library. Processing started.`);
+        void refreshItem(newItem.id, newItem.title);
+      }
     } catch (err) {
       console.error(err);
       showToast('Failed to capture item.');
     } finally {
       setIsInlineGenerating(false);
+    }
+  };
+
+  const handleRetryItem = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const res = await fetch(`/api/items/${id}/reprocess`, {
+        method: 'POST',
+      });
+
+      if (!res.ok) {
+        throw new Error('Retry failed');
+      }
+
+      const updated = await res.json();
+      upsertItem(updated);
+      setSelectedItemId(updated.id);
+      showToast(updated.processingStatus === 'failed' ? `Retry failed for "${updated.title}"` : `Reprocessed "${updated.title}"`);
+    } catch (err) {
+      console.error(err);
+      showToast('Unable to retry processing right now.');
     }
   };
 
@@ -536,6 +626,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
     { name: 'Articles', icon: FileText },
     { name: 'Videos', icon: Play },
     { name: 'PDFs', icon: BookOpen },
+    { name: 'Images', icon: ImageIcon },
     { name: 'Social Links', icon: Globe },
     { name: 'Voice Notes', icon: Mic },
   ];
@@ -793,6 +884,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                 }}
                 onToggleBookmark={handleToggleBookmark}
                 onDeleteItem={handleDeleteItem}
+                onRetryItem={handleRetryItem}
               />
 
               <VaultDetailPanel
@@ -804,6 +896,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                 onFlipCard={setFlippedCardId}
                 onToggleBookmark={handleToggleBookmark}
                 onDeleteItem={handleDeleteItem}
+                onRetryItem={handleRetryItem}
               />
             </div>
           )}
@@ -1008,7 +1101,10 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 0.4 }}
               exit={{ opacity: 0 }}
-              onClick={() => setShowCaptureModal(false)}
+              onClick={() => {
+                resetCaptureState();
+                setShowCaptureModal(false);
+              }}
               className="absolute inset-0 bg-neutral-950"
             />
 
@@ -1020,7 +1116,13 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
             >
               <div className="flex justify-between items-center mb-5 border-b border-neutral-150 pb-3">
                 <BrandLockup size="sm" subtitle="AI SECOND BRAIN" />
-                <button onClick={() => setShowCaptureModal(false)} className="p-1 rounded-full text-neutral-400 hover:text-neutral-900 transition">
+                <button
+                  onClick={() => {
+                    resetCaptureState();
+                    setShowCaptureModal(false);
+                  }}
+                  className="p-1 rounded-full text-neutral-400 hover:text-neutral-900 transition"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -1028,18 +1130,22 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
               <form onSubmit={handleCaptureSubmit} className="space-y-4">
                 <div>
                   <label className="block text-[10px] font-bold font-mono text-neutral-400 uppercase tracking-widest mb-2">Classification Category</label>
-                  <div className="grid grid-cols-5 gap-2">
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                     {[
                       { val: 'Articles', label: 'Article', icon: FileText },
                       { val: 'Videos', label: 'Video', icon: Play },
                       { val: 'PDFs', label: 'PDF Paper', icon: BookOpen },
+                      { val: 'Images', label: 'Screenshot', icon: ImageIcon },
                       { val: 'Social Links', label: 'Social link', icon: Globe },
                       { val: 'Voice Notes', label: 'Memo', icon: Mic },
                     ].map((btn) => (
                       <button
                         key={btn.val}
                         type="button"
-                        onClick={() => setCaptureType(btn.val as 'Videos' | 'Articles' | 'PDFs' | 'Social Links' | 'Voice Notes')}
+                        onClick={() => {
+                          setCaptureType(btn.val as 'Videos' | 'Articles' | 'PDFs' | 'Social Links' | 'Voice Notes' | 'Images');
+                          resetCaptureState();
+                        }}
                         className={cn(
                           'py-2 px-1 text-[10px] font-bold rounded-lg border flex flex-col items-center gap-1.5 transition text-center',
                           captureType === btn.val ? 'bg-neutral-100 text-neutral-900 border-neutral-900' : 'bg-white text-neutral-500 border-neutral-200 hover:bg-neutral-50'
@@ -1080,6 +1186,40 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                       <textarea
                         rows={2}
                         placeholder={captureCopy.PDFs.textPlaceholder}
+                        value={captureContent}
+                        onChange={(e) => setCaptureContent(e.target.value)}
+                        className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg text-xs placeholder-neutral-400 focus:bg-white focus:outline-none focus:border-neutral-950 transition"
+                      />
+                    </div>
+                  </div>
+                ) : captureType === 'Images' ? (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-bold font-mono text-neutral-400 uppercase tracking-widest mb-1.5">Screenshot or Image Upload</label>
+                      <div className="border-2 border-dashed border-neutral-200/80 rounded-xl p-6 bg-neutral-50 hover:bg-neutral-100/50 transition text-center relative group">
+                        <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                        <div className="space-y-2">
+                          <ImageIcon className="w-8 h-8 text-neutral-400 mx-auto" />
+                          <div className="text-xs font-semibold text-neutral-700">{uploadFile ? uploadFile.name : 'Click or drag your screenshot here'}</div>
+                          <p className="text-[10px] text-neutral-400 font-mono">
+                            {uploadFile ? `${(uploadFile.size / 1024 / 1024).toFixed(2)} MB` : 'Private image capture with AI summary and tags'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold font-mono text-neutral-400 uppercase tracking-widest mb-1.5">Reference URL (Optional)</label>
+                      <input
+                        type="url"
+                        placeholder={captureCopy.Images.sourcePlaceholder}
+                        value={captureUrl}
+                        onChange={(e) => setCaptureUrl(e.target.value)}
+                        className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg text-xs placeholder-neutral-400 focus:bg-white focus:outline-none focus:border-neutral-950 transition mb-2"
+                      />
+                      <textarea
+                        rows={2}
+                        placeholder={captureCopy.Images.textPlaceholder}
                         value={captureContent}
                         onChange={(e) => setCaptureContent(e.target.value)}
                         className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg text-xs placeholder-neutral-400 focus:bg-white focus:outline-none focus:border-neutral-950 transition"
@@ -1186,10 +1326,13 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                 <div className="pt-3 flex justify-end space-x-2 border-t border-neutral-150">
                   <button
                     type="button"
-                    onClick={() => setShowCaptureModal(false)}
-                    className="text-xs font-semibold px-4.5 py-2 rounded-lg border border-neutral-200 hover:bg-neutral-50 text-neutral-700 transition"
-                  >
-                    Cancel
+                        onClick={() => {
+                          resetCaptureState();
+                          setShowCaptureModal(false);
+                        }}
+                        className="text-xs font-semibold px-4.5 py-2 rounded-lg border border-neutral-200 hover:bg-neutral-50 text-neutral-700 transition"
+                      >
+                        Cancel
                   </button>
                   <button
                     type="submit"

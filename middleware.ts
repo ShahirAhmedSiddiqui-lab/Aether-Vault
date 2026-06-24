@@ -1,8 +1,27 @@
-import type { NextRequest } from 'next/server';
-import { updateSession } from '@/lib/supabase/proxy';
+import { NextResponse, type NextRequest } from 'next/server';
+
+function isPublicPath(pathname: string) {
+  return pathname === '/' || pathname.startsWith('/login') || pathname.startsWith('/api') || pathname.startsWith('/_next');
+}
+
+function hasSupabaseSessionCookie(request: NextRequest) {
+  return request.cookies
+    .getAll()
+    .some((cookie) => cookie.name.startsWith('sb-') && cookie.name.includes('auth-token'));
+}
 
 export async function middleware(request: NextRequest) {
-  return updateSession(request);
+  const pathname = request.nextUrl.pathname;
+  const hasSessionCookie = hasSupabaseSessionCookie(request);
+
+  if (!hasSessionCookie && !isPublicPath(pathname)) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = '/login';
+    redirectUrl.searchParams.set('message', 'Please log in to access your vault.');
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {
