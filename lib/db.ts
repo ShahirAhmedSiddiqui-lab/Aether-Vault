@@ -50,13 +50,23 @@ export interface KnowledgeItem {
 }
 
 export interface ChatReferencedSource {
+  itemId?: string;
   title: string;
   source: string;
   type: string;
 }
 
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  lastMessageAt?: string;
+}
+
 export interface ChatMessage {
   id: string;
+  sessionId?: string;
   role: 'user' | 'model';
   content: string;
   summaryBlock?: string;

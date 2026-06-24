@@ -2,6 +2,7 @@ import { type SupabaseClient } from '@supabase/supabase-js';
 import {
   ChatMessage,
   ChatReferencedSource,
+  ChatSession,
   Flashcard,
   ItemCaptureKind,
   ItemPreviewMetadata,
@@ -43,12 +44,21 @@ type KnowledgeItemRow = {
 
 type ChatMessageRow = {
   id: string;
+  session_id: string | null;
   role: ChatMessage['role'];
   content: string;
   summary_block: string | null;
   referenced_sources: unknown;
   tags: string[] | null;
   created_at: string;
+};
+
+type ChatSessionRow = {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  last_message_at: string | null;
 };
 
 function normalizeFlashcards(value: unknown): Flashcard[] {
@@ -87,12 +97,15 @@ function normalizeReferencedSources(value: unknown): ChatReferencedSource[] {
       const title = typeof source.title === 'string' ? source.title : '';
       const origin = typeof source.source === 'string' ? source.source : '';
       const type = typeof source.type === 'string' ? source.type : 'note';
+      const itemId = typeof source.itemId === 'string' ? source.itemId : undefined;
 
       if (!title || !origin) {
         return null;
       }
 
-      return { title, source: origin, type };
+      return itemId
+        ? { itemId, title, source: origin, type }
+        : { title, source: origin, type };
     })
     .filter((entry): entry is ChatReferencedSource => entry !== null);
 }
@@ -182,12 +195,23 @@ export function mapKnowledgeItem(row: KnowledgeItemRow, fileUrl?: string): Knowl
 export function mapChatMessage(row: ChatMessageRow): ChatMessage {
   return {
     id: row.id,
+    sessionId: row.session_id ?? undefined,
     role: row.role,
     content: row.content,
     summaryBlock: row.summary_block ?? undefined,
     referencedSources: normalizeReferencedSources(row.referenced_sources),
     tags: row.tags ?? [],
     createdAt: formatRelativeDate(row.created_at),
+  };
+}
+
+export function mapChatSession(row: ChatSessionRow): ChatSession {
+  return {
+    id: row.id,
+    title: row.title,
+    createdAt: formatRelativeDate(row.created_at),
+    updatedAt: formatRelativeDate(row.updated_at),
+    lastMessageAt: row.last_message_at ? formatRelativeDate(row.last_message_at) : undefined,
   };
 }
 

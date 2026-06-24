@@ -2,10 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateVaultChatAnswer } from '@/lib/ai/service';
 import { createClient } from '@/lib/supabase/server';
 import { mapChatMessage, mapKnowledgeItem } from '@/lib/supabase/vault';
-import { buildChatSessionTitle, getOrCreateLatestChatSession, touchChatSession } from '@/lib/vault/chat';
+import {
+  assertChatSessionOwnership,
+  buildChatSessionTitle,
+  getChatMessages,
+  touchChatSession,
+} from '@/lib/vault/chat';
 
-export async function GET() {
+export async function GET(_: NextRequest, context: { params: Promise<{ sessionId: string }> }) {
   try {
+    const { sessionId } = await context.params;
     const supabase = await createClient();
     const {
       data: { user },
@@ -15,27 +21,17 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const session = await getOrCreateLatestChatSession(supabase, user.id);
-    const { data, error } = await supabase
-      .from('chat_messages')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('session_id', session.id)
-      .order('created_at', { ascending: true });
-
-    if (error) {
-      throw error;
-    }
-
-    return NextResponse.json((data ?? []).map(mapChatMessage));
+    const messages = await getChatMessages(supabase, user.id, sessionId);
+    return NextResponse.json(messages);
   } catch (error) {
-    console.error('Failed to get chats:', error);
+    console.error('Failed to get chat messages:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest, context: { params: Promise<{ sessionId: string }> }) {
   try {
+    const { sessionId } = await context.params;
     const supabase = await createClient();
     const {
       data: { user },
@@ -51,14 +47,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Query is required' }, { status: 400 });
     }
 
-    const session = await getOrCreateLatestChatSession(supabase, user.id);
+    await assertChatSessionOwnership(supabase, user.id, sessionId);
 
     const [{ data: existingChats, error: chatError }, { data: itemRows, error: itemError }] = await Promise.all([
       supabase
         .from('chat_messages')
         .select('*')
         .eq('user_id', user.id)
-        .eq('session_id', session.id)
+        .eq('session_id', sessionId)
         .order('created_at', { ascending: true }),
       supabase
         .from('knowledge_items')
@@ -88,14 +84,14 @@ export async function POST(req: NextRequest) {
         {
           userMessage: {
             id: `preview-user-${Date.now()}`,
-            sessionId: session.id,
+            sessionId,
             role: 'user',
             content: query,
             createdAt: 'Just now',
           },
           modelMessage: {
             id: `preview-model-${Date.now()}`,
-            sessionId: session.id,
+            sessionId,
             role: 'model',
             content: aiResponse.answer,
             summaryBlock: aiResponse.summaryBlock,
@@ -114,7 +110,7 @@ export async function POST(req: NextRequest) {
       .insert([
         {
           user_id: user.id,
-          session_id: session.id,
+          session_id: sessionId,
           role: 'user',
           content: query.trim(),
           summary_block: null,
@@ -123,7 +119,7 @@ export async function POST(req: NextRequest) {
         },
         {
           user_id: user.id,
-          session_id: session.id,
+          session_id: sessionId,
           role: 'model',
           content: aiResponse.answer,
           summary_block: aiResponse.summaryBlock ?? null,
@@ -137,7 +133,7 @@ export async function POST(req: NextRequest) {
       throw insertError ?? new Error('Failed to persist chat messages.');
     }
 
-    await touchChatSession(supabase, session.id, buildChatSessionTitle(query), lastMessageAt);
+    await touchChatSession(supabase, sessionId, buildChatSessionTitle(query), lastMessageAt);
 
     const [userMessage, modelMessage] = insertedMessages.map(mapChatMessage);
 
@@ -149,13 +145,14 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('Failed to send message:', error);
+    console.error('Failed to send session message:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
 
-export async function DELETE() {
+export async function DELETE(_: NextRequest, context: { params: Promise<{ sessionId: string }> }) {
   try {
+    const { sessionId } = await context.params;
     const supabase = await createClient();
     const {
       data: { user },
@@ -165,15 +162,21 @@ export async function DELETE() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { error } = await supabase.from('chat_sessions').delete().eq('user_id', user.id);
+    await assertChatSessionOwnership(supabase, user.id, sessionId);
+
+    const { error } = await supabase
+      .from('chat_messages')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('session_id', sessionId);
 
     if (error) {
       throw error;
     }
 
-    return NextResponse.json({ success: true, message: 'Chat history cleared' });
+    return NextResponse.json({ success: true, message: 'Chat session cleared' });
   } catch (error) {
-    console.error('Failed to clear chats:', error);
+    console.error('Failed to clear session messages:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

@@ -23,7 +23,7 @@ import {
   Bookmark,
   Trash2,
 } from 'lucide-react';
-import { ChatMessage, KnowledgeItem } from '@/lib/db';
+import { ChatMessage, ChatSession, KnowledgeItem } from '@/lib/db';
 import { matchesSearch } from '@/lib/supabase/vault';
 import { cn } from '@/lib/utils';
 import { BrandLockup } from '@/app/_components/brand-lockup';
@@ -43,6 +43,12 @@ type ConfirmDialogState = {
   cancelLabel?: string;
   tone?: 'default' | 'danger';
 };
+
+type VaultTypeFilter = 'All' | KnowledgeItem['type'];
+type VaultRecencyFilter = 'any' | 'today' | '7d' | '30d' | '90d';
+type VaultBookmarkFilter = 'all' | 'bookmarked' | 'unbookmarked';
+
+const ITEM_TABS: KnowledgeItem['type'][] = ['Articles', 'Videos', 'PDFs', 'Images', 'Social Links', 'Voice Notes'];
 
 type VaultTab =
   | 'Overview'
@@ -105,11 +111,17 @@ const captureCopy: Record<
 };
 
 export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
+  const hasMountedTabStateRef = React.useRef(false);
   const [currentTab, setCurrentTab] = React.useState<VaultTab>('Overview');
   const [items, setItems] = React.useState<KnowledgeItem[]>([]);
   const [chats, setChats] = React.useState<ChatMessage[]>([]);
+  const [chatSessions, setChatSessions] = React.useState<ChatSession[]>([]);
+  const [activeChatSessionId, setActiveChatSessionId] = React.useState<string>('');
   const [selectedItemId, setSelectedItemId] = React.useState<string>('');
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [typeFilter, setTypeFilter] = React.useState<VaultTypeFilter>('All');
+  const [recencyFilter, setRecencyFilter] = React.useState<VaultRecencyFilter>('any');
+  const [bookmarkFilter, setBookmarkFilter] = React.useState<VaultBookmarkFilter>('all');
   const [chatInput, setChatInput] = React.useState('');
   const [captureUrl, setCaptureUrl] = React.useState('');
   const [captureContent, setCaptureContent] = React.useState('');
@@ -133,6 +145,9 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
   const [isSendingChat, setIsSendingChat] = React.useState(false);
   const [notification, setNotification] = React.useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = React.useState<ConfirmDialogState | null>(null);
+  const [filterReferenceTime] = React.useState(() => Date.now());
+  const [isDetailPanelOpen, setIsDetailPanelOpen] = React.useState(true);
+  const [isDetailFullscreen, setIsDetailFullscreen] = React.useState(false);
 
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
   const timerRef = React.useRef<any>(null);
@@ -156,7 +171,18 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
         ? 'Vault Guide'
         : currentTab === 'Chat'
           ? 'AI Chat Search'
-          : `${currentTab} Library`;
+        : `${currentTab} Library`;
+  const activeChatSession = React.useMemo(
+    () => chatSessions.find((session) => session.id === activeChatSessionId),
+    [activeChatSessionId, chatSessions]
+  );
+  const latestReferencedSources = React.useMemo(
+    () =>
+      [...chats]
+        .reverse()
+        .find((chat) => chat.role === 'model' && (chat.referencedSources?.length ?? 0) > 0)?.referencedSources ?? [],
+    [chats]
+  );
 
   React.useEffect(() => {
     if (isRecording) {
@@ -378,8 +404,59 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
     };
   }, [items]);
 
+  const loadChatSessions = React.useCallback(async (preferredSessionId?: string) => {
+    try {
+      let sessions: ChatSession[] = [];
+      const response = await fetch('/api/chat/sessions');
+      const data = await response.json();
+
+      if (Array.isArray(data)) {
+        sessions = data;
+      }
+
+      if (sessions.length === 0) {
+        const createResponse = await fetch('/api/chat/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: 'New chat' }),
+        });
+
+        if (createResponse.ok) {
+          const created = (await createResponse.json()) as ChatSession;
+          sessions = [created];
+        }
+      }
+
+      setChatSessions(sessions);
+      setActiveChatSessionId((prev) => {
+        if (preferredSessionId && sessions.some((session) => session.id === preferredSessionId)) {
+          return preferredSessionId;
+        }
+
+        if (prev && sessions.some((session) => session.id === prev)) {
+          return prev;
+        }
+
+        return sessions[0]?.id ?? '';
+      });
+
+      return sessions;
+    } catch (err) {
+      console.error('Error fetching chat sessions:', err);
+      return [];
+    }
+  }, []);
+
+  const openChatTab = React.useCallback(() => {
+    setCurrentTab('Chat');
+
+    if (chatSessions.length === 0) {
+      void loadChatSessions();
+    }
+  }, [chatSessions.length, loadChatSessions]);
+
   React.useEffect(() => {
-    if (currentTab !== 'Chat') {
+    if (currentTab !== 'Chat' || !activeChatSessionId) {
       return;
     }
 
@@ -387,7 +464,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
 
     const loadChats = async () => {
       try {
-        const res = await fetch('/api/chats');
+        const res = await fetch(`/api/chat/sessions/${activeChatSessionId}/messages`);
         const data = await res.json();
         if (!cancelled && Array.isArray(data)) {
           setChats(data);
@@ -402,6 +479,18 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
     return () => {
       cancelled = true;
     };
+  }, [activeChatSessionId, currentTab]);
+
+  React.useEffect(() => {
+    if (!hasMountedTabStateRef.current) {
+      hasMountedTabStateRef.current = true;
+      return;
+    }
+
+    setSelectedItemId('');
+    setFlippedCardId(null);
+    setIsDetailPanelOpen(false);
+    setIsDetailFullscreen(false);
   }, [currentTab]);
 
   const startVoiceRecording = async () => {
@@ -708,6 +797,49 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
     }
   };
 
+  const ensureActiveChatSession = React.useCallback(async () => {
+    if (activeChatSessionId) {
+      return activeChatSessionId;
+    }
+
+    const response = await fetch('/api/chat/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'New chat' }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create chat session');
+    }
+
+    const created = (await response.json()) as ChatSession;
+    setChatSessions((prev) => [created, ...prev]);
+    setActiveChatSessionId(created.id);
+    return created.id;
+  }, [activeChatSessionId]);
+
+  const handleCreateChatSession = async () => {
+    try {
+      const response = await fetch('/api/chat/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'New chat' }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create session');
+      }
+
+      const created = (await response.json()) as ChatSession;
+      setChatSessions((prev) => [created, ...prev]);
+      setActiveChatSessionId(created.id);
+      setChats([]);
+    } catch (err) {
+      console.error(err);
+      showToast('Unable to start a new chat right now.');
+    }
+  };
+
   const handleChatSubmit = async (e?: React.FormEvent, customQuery?: string) => {
     if (e) e.preventDefault();
     if (isSendingChat) return;
@@ -727,7 +859,8 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
     setChats((prev) => [...prev, tempUserMsg]);
 
     try {
-      const response = await fetch('/api/chats', {
+      const sessionId = await ensureActiveChatSession();
+      const response = await fetch(`/api/chat/sessions/${sessionId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query }),
@@ -743,6 +876,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
         const newMsgs = [data.userMessage, data.modelMessage].filter((newMsg) => !filtered.some((m) => m.id === newMsg.id));
         return [...filtered, ...newMsgs];
       });
+      await loadChatSessions(sessionId);
     } catch (err) {
       console.error(err);
       showToast('Brain query synthesis failed.');
@@ -775,7 +909,8 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
     const contextText = relevantContext.map((i) => `${i.title}: ${i.summary}`).join('\n\n');
 
     try {
-      const res = await fetch('/api/chats', {
+      const sessionId = await ensureActiveChatSession();
+      const res = await fetch(`/api/chat/sessions/${sessionId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -797,21 +932,32 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
   };
 
   const handleClearHistory = async () => {
+    if (!activeChatSessionId) return;
+
     const confirmed = await requestConfirmation({
-      title: 'Clear chat history?',
-      message: 'This removes saved chat messages only. Your vault items, files, and captures will stay safe.',
-      confirmLabel: 'Clear History',
-      cancelLabel: 'Keep History',
+      title: 'Delete this chat session?',
+      message: 'This removes the selected chat session and all messages inside it. Your saved vault items will stay safe.',
+      confirmLabel: 'Delete Session',
+      cancelLabel: 'Keep Session',
       tone: 'danger',
     });
 
     if (!confirmed) return;
 
     try {
-      const response = await fetch('/api/chats', { method: 'DELETE' });
+      const response = await fetch(`/api/chat/sessions/${activeChatSessionId}`, { method: 'DELETE' });
       if (response.ok) {
+        const remainingSessions = chatSessions.filter((session) => session.id !== activeChatSessionId);
+        setChatSessions(remainingSessions);
         setChats([]);
-        showToast('Chat history cleared');
+
+        if (remainingSessions.length > 0) {
+          setActiveChatSessionId(remainingSessions[0].id);
+        } else {
+          await handleCreateChatSession();
+        }
+
+        showToast('Chat session deleted');
       }
     } catch (err) {
       console.error(err);
@@ -819,8 +965,15 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
   };
 
   const visibleItems = React.useMemo(
-    () =>
-      items.filter((item) => {
+    () => {
+      const effectiveTypeFilter = ITEM_TABS.includes(currentTab as KnowledgeItem['type'])
+        ? (currentTab as KnowledgeItem['type'])
+        : typeFilter === 'All'
+          ? null
+          : typeFilter;
+      const effectiveBookmarkFilter = currentTab === 'Bookmarks' ? 'bookmarked' : bookmarkFilter;
+
+      return items.filter((item) => {
         const matchesTab =
           currentTab === 'Overview'
             ? !item.deletedAt
@@ -831,17 +984,34 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                 : currentTab === 'Chat' || currentTab === 'Guide'
                   ? !item.deletedAt
                   : !item.deletedAt && item.type === currentTab;
+        const matchesType = !effectiveTypeFilter || item.type === effectiveTypeFilter;
+        const matchesBookmark =
+          effectiveBookmarkFilter === 'all'
+            ? true
+            : effectiveBookmarkFilter === 'bookmarked'
+              ? !!item.bookmarked
+              : !item.bookmarked;
+        const itemAgeMs = filterReferenceTime - new Date(item.createdAtDate).getTime();
+        const matchesRecency =
+          recencyFilter === 'any'
+            ? true
+            : recencyFilter === 'today'
+              ? itemAgeMs <= 24 * 60 * 60 * 1000
+              : recencyFilter === '7d'
+                ? itemAgeMs <= 7 * 24 * 60 * 60 * 1000
+                : recencyFilter === '30d'
+                  ? itemAgeMs <= 30 * 24 * 60 * 60 * 1000
+                  : itemAgeMs <= 90 * 24 * 60 * 60 * 1000;
         const matchesQuery = !searchQuery.trim() || matchesSearch(item, searchQuery);
-        return matchesTab && matchesQuery;
-      }),
-    [currentTab, items, searchQuery]
+        return matchesTab && matchesType && matchesBookmark && matchesRecency && matchesQuery;
+      });
+    },
+    [bookmarkFilter, currentTab, filterReferenceTime, items, recencyFilter, searchQuery, typeFilter]
   );
 
-  const currentItem =
-    visibleItems.find((item) => item.id === selectedItemId) ||
-    visibleItems[0] ||
-    items.find((item) => item.id === selectedItemId) ||
-    items[0];
+  const currentItem = selectedItemId
+    ? visibleItems.find((item) => item.id === selectedItemId) || items.find((item) => item.id === selectedItemId)
+    : undefined;
 
   const categories = [
     { name: 'Overview', icon: Layers },
@@ -936,7 +1106,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
               })}
 
               <button
-                onClick={() => setCurrentTab('Chat')}
+                onClick={openChatTab}
                 className={cn(
                   'w-full px-3 py-2.5 rounded-xl flex items-center space-x-3 text-left transition',
                   currentTab === 'Chat' ? 'bg-neutral-100 text-neutral-950 font-semibold' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
@@ -1032,7 +1202,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
 
             <button
               onClick={() => {
-                setCurrentTab('Chat');
+                openChatTab();
                 void handleChatSubmit(undefined, 'Synthesize a core summary breakdown of my saved knowledge assets.');
               }}
               className="px-3.5 py-1.5 text-[10px] font-bold font-mono uppercase tracking-wider bg-neutral-950 hover:bg-neutral-800 text-white rounded-lg flex items-center transition shadow-xs active:scale-[0.98]"
@@ -1094,47 +1264,68 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
 
           {currentTab !== 'Chat' && currentTab !== 'Guide' && (
             <div className="flex-1 flex flex-col lg:flex-row overflow-hidden w-full">
-              <VaultContentPanel
-                currentTab={currentTab}
-                items={items}
-                isTrashView={currentTab === 'Trash'}
-                searchQuery={searchQuery}
-                selectedItemId={selectedItemId}
-                inlineInput={inlineInput}
-                isInlineGenerating={isInlineGenerating}
-                localAskQuery={localAskQuery}
-                localAskAnswer={localAskAnswer}
-                localAskLoading={localAskLoading}
-                onInlineInputChange={setInlineInput}
-                onLocalAskQueryChange={setLocalAskQuery}
-                onInlineCapture={handleInlineCapture}
-                onRunLocalAskAI={runLocalAskAI}
-                onClearLocalAskAnswer={() => setLocalAskAnswer(null)}
-                onSelectItem={(id) => {
-                  setSelectedItemId(id);
-                  setFlippedCardId(null);
-                }}
-                onToggleBookmark={handleToggleBookmark}
-                onDeleteItem={handleDeleteItem}
-                onRestoreItem={handleRestoreItem}
-                onPermanentDeleteItem={handlePermanentDeleteItem}
-                onRetryItem={handleRetryItem}
-              />
+              {!isDetailFullscreen && (
+                <VaultContentPanel
+                  key={currentTab}
+                  currentTab={currentTab}
+                  items={items}
+                  isTrashView={currentTab === 'Trash'}
+                  searchQuery={searchQuery}
+                  filterReferenceTime={filterReferenceTime}
+                  typeFilter={typeFilter}
+                  recencyFilter={recencyFilter}
+                  bookmarkFilter={bookmarkFilter}
+                  selectedItemId={selectedItemId}
+                  inlineInput={inlineInput}
+                  isInlineGenerating={isInlineGenerating}
+                  localAskQuery={localAskQuery}
+                  localAskAnswer={localAskAnswer}
+                  localAskLoading={localAskLoading}
+                  onInlineInputChange={setInlineInput}
+                  onLocalAskQueryChange={setLocalAskQuery}
+                  onTypeFilterChange={setTypeFilter}
+                  onRecencyFilterChange={setRecencyFilter}
+                  onBookmarkFilterChange={setBookmarkFilter}
+                  onInlineCapture={handleInlineCapture}
+                  onRunLocalAskAI={runLocalAskAI}
+                  onClearLocalAskAnswer={() => setLocalAskAnswer(null)}
+                  onSelectItem={(id) => {
+                    setSelectedItemId(id);
+                    setFlippedCardId(null);
+                    setIsDetailPanelOpen(true);
+                    setIsDetailFullscreen(false);
+                  }}
+                  onToggleBookmark={handleToggleBookmark}
+                  onDeleteItem={handleDeleteItem}
+                  onRestoreItem={handleRestoreItem}
+                  onPermanentDeleteItem={handlePermanentDeleteItem}
+                  onRetryItem={handleRetryItem}
+                />
+              )}
 
-              <VaultDetailPanel
-                currentItem={currentItem}
-                isTrashView={currentTab === 'Trash'}
-                flippedCardId={flippedCardId}
-                voiceSpeed={voiceSpeed}
-                audioRef={audioRef}
-                onSetVoiceSpeed={setVoiceSpeed}
-                onFlipCard={setFlippedCardId}
-                onToggleBookmark={handleToggleBookmark}
-                onDeleteItem={handleDeleteItem}
-                onRestoreItem={handleRestoreItem}
-                onPermanentDeleteItem={handlePermanentDeleteItem}
-                onRetryItem={handleRetryItem}
-              />
+              {isDetailPanelOpen && (
+                <VaultDetailPanel
+                  key={currentItem?.id ?? 'detail-panel'}
+                  currentItem={currentItem}
+                  isTrashView={currentTab === 'Trash'}
+                  isFullscreen={isDetailFullscreen}
+                  flippedCardId={flippedCardId}
+                  voiceSpeed={voiceSpeed}
+                  audioRef={audioRef}
+                  onSetVoiceSpeed={setVoiceSpeed}
+                  onFlipCard={setFlippedCardId}
+                  onToggleBookmark={handleToggleBookmark}
+                  onDeleteItem={handleDeleteItem}
+                  onRestoreItem={handleRestoreItem}
+                  onPermanentDeleteItem={handlePermanentDeleteItem}
+                  onRetryItem={handleRetryItem}
+                  onClose={() => {
+                    setIsDetailPanelOpen(false);
+                    setIsDetailFullscreen(false);
+                  }}
+                  onToggleFullscreen={() => setIsDetailFullscreen((prev) => !prev)}
+                />
+              )}
             </div>
           )}
 
@@ -1147,9 +1338,20 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                     <span className="text-xs font-bold text-neutral-800 font-mono uppercase tracking-widest">Memora Neural Chat</span>
                   </div>
 
-                  <button onClick={handleClearHistory} className="text-[10px] font-mono hover:text-red-600 text-neutral-400 font-bold transition">
-                    CLEAR RECORDS
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => void handleCreateChatSession()}
+                      className="rounded-lg border border-neutral-200 px-2.5 py-1 text-[10px] font-mono font-bold text-neutral-500 transition hover:border-neutral-900 hover:text-neutral-900"
+                    >
+                      NEW CHAT
+                    </button>
+                    <button
+                      onClick={() => void handleClearHistory()}
+                      className="text-[10px] font-mono font-bold text-neutral-400 transition hover:text-red-600"
+                    >
+                      DELETE CHAT
+                    </button>
+                  </div>
                 </div>
 
                 <div ref={chatScrollContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -1260,19 +1462,54 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
               <div className="w-full lg:w-72 bg-white border-t lg:border-t-0 lg:border-l border-neutral-200 p-6 flex flex-col justify-between shrink-0 overflow-y-auto text-left">
                 <div className="space-y-6">
                   <div>
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div className="text-[10px] font-bold font-mono uppercase tracking-widest text-neutral-400">Chat sessions</div>
+                      {activeChatSession && (
+                        <div className="text-[9px] font-mono uppercase tracking-widest text-neutral-350">{activeChatSession.updatedAt}</div>
+                      )}
+                    </div>
+                    <div className="space-y-2.5">
+                      {chatSessions.length > 0 ? (
+                        chatSessions.slice(0, 6).map((session) => (
+                          <button
+                            key={session.id}
+                            onClick={() => setActiveChatSessionId(session.id)}
+                            className={cn(
+                              'w-full rounded-xl border p-3 text-left transition',
+                              session.id === activeChatSessionId
+                                ? 'border-neutral-900 bg-neutral-100'
+                                : 'border-neutral-200 bg-white hover:border-neutral-900'
+                            )}
+                          >
+                            <div className="line-clamp-2 text-[11px] font-semibold leading-snug text-neutral-800">{session.title}</div>
+                            <div className="mt-2 text-[9px] font-mono uppercase tracking-widest text-neutral-400">
+                              {session.lastMessageAt ?? session.updatedAt}
+                            </div>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="text-[10px] text-neutral-400 py-6 text-center border border-dashed border-neutral-200 rounded-xl">
+                          No chat sessions yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
                     <div className="text-[10px] font-bold font-mono uppercase tracking-widest text-neutral-400 mb-3">Cited references</div>
                     <div className="space-y-2.5">
-                      {chats
-                        .filter((c) => c.role === 'model' && c.referencedSources)
-                        .slice(-1)[0]
-                        ?.referencedSources?.map((src, idx) => (
+                      {latestReferencedSources.map((src, idx) => (
                           <div
                             key={idx}
                             className="p-3 bg-neutral-50 border border-neutral-200 hover:border-neutral-900 rounded-xl text-left cursor-pointer transition group"
                             onClick={() => {
-                              const found = items.find((i) => i.title.toLowerCase().includes(src.title.toLowerCase().substring(0, 10)));
+                              const found = src.itemId
+                                ? items.find((item) => item.id === src.itemId)
+                                : items.find((item) => item.title.toLowerCase() === src.title.toLowerCase());
                               if (found) {
                                 setSelectedItemId(found.id);
+                                setIsDetailPanelOpen(true);
+                                setIsDetailFullscreen(false);
                                 setCurrentTab('Overview');
                                 showToast(`Loaded referenced sheet: ${src.title}`);
                               } else {
@@ -1294,7 +1531,9 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                               {src.title}
                             </h5>
                           </div>
-                        )) || (
+                        ))}
+
+                      {latestReferencedSources.length === 0 && (
                         <div className="text-[10px] text-neutral-400 py-6 text-center border border-dashed border-neutral-200 rounded-xl">
                           No query search citations active.
                         </div>

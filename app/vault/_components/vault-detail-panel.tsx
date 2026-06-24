@@ -4,13 +4,14 @@
 
 import * as React from 'react';
 import { motion } from 'motion/react';
-import { Bookmark, BookOpen, ExternalLink, ImageIcon, Layers, LoaderCircle, Play, RefreshCw, RotateCcw, Trash2, Volume2 } from 'lucide-react';
+import { Bookmark, BookOpen, ExternalLink, ImageIcon, Layers, LoaderCircle, Maximize2, Minimize2, Play, RefreshCw, RotateCcw, Trash2, Volume2, X } from 'lucide-react';
 import { KnowledgeItem } from '@/lib/db';
 import { cn } from '@/lib/utils';
 
 type VaultDetailPanelProps = {
   currentItem?: KnowledgeItem;
   isTrashView: boolean;
+  isFullscreen: boolean;
   flippedCardId: string | null;
   voiceSpeed: number;
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -21,11 +22,14 @@ type VaultDetailPanelProps = {
   onRestoreItem: (id: string, event: React.MouseEvent) => void;
   onPermanentDeleteItem: (id: string, event: React.MouseEvent) => void;
   onRetryItem: (id: string, event: React.MouseEvent) => void;
+  onClose: () => void;
+  onToggleFullscreen: () => void;
 };
 
 export function VaultDetailPanel({
   currentItem,
   isTrashView,
+  isFullscreen,
   flippedCardId,
   voiceSpeed,
   audioRef,
@@ -36,31 +40,52 @@ export function VaultDetailPanel({
   onRestoreItem,
   onPermanentDeleteItem,
   onRetryItem,
+  onClose,
+  onToggleFullscreen,
 }: VaultDetailPanelProps) {
+  const [isPdfPreviewOpen, setIsPdfPreviewOpen] = React.useState(false);
+
   if (!currentItem) {
-    return (
-      <div className="w-full lg:w-96 bg-white shrink-0 border-t lg:border-t-0 border-neutral-200/85 p-6 flex flex-col overflow-y-auto">
-        <div className="m-auto text-center py-12 select-none">
-          <Layers className="w-8 h-8 text-neutral-300 mx-auto mb-2" />
-          <span className="text-xs text-neutral-400 block font-mono">No card focused.</span>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
-    <div className="w-full lg:w-96 bg-white shrink-0 border-t lg:border-t-0 border-neutral-200/85 p-6 flex flex-col overflow-y-auto">
+    <div
+      className={cn(
+        'bg-white shrink-0 border-t lg:border-t-0 border-neutral-200/85 p-6 flex flex-col overflow-y-auto',
+        isFullscreen ? 'w-full flex-1' : 'w-full lg:w-96'
+      )}
+    >
       <div className="space-y-6 text-left select-none">
         <div>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2 border-b border-neutral-100 pb-2">
-            <span className="text-[10px] font-extrabold uppercase font-mono tracking-widest text-[#52525b]">SYNTHESIS SHEET</span>
-            <div className="flex items-center space-x-2.5 flex-wrap">
+          <div className="mb-2 border-b border-neutral-100 pb-2">
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-[10px] font-extrabold uppercase font-mono tracking-widest text-[#52525b]">SYNTHESIS SHEET</span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={onToggleFullscreen}
+                  className="inline-flex h-8 items-center justify-center rounded-lg border border-neutral-200 px-2 text-neutral-600 transition hover:border-neutral-300 hover:text-neutral-950"
+                  title={isFullscreen ? 'Exit fullscreen' : 'Open fullscreen'}
+                >
+                  {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  onClick={onClose}
+                  className="inline-flex h-8 items-center justify-center rounded-lg border border-neutral-200 px-2 text-neutral-600 transition hover:border-neutral-300 hover:text-neutral-950"
+                  title="Close synthesis sheet"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               {currentItem.url && (
                 <a
                   href={currentItem.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-[10px] font-bold font-mono text-neutral-800 hover:text-neutral-950 hover:underline flex items-center space-x-0.5"
+                  className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-[10px] font-bold font-mono text-neutral-700 transition hover:border-neutral-300 hover:text-neutral-950"
                 >
                   <span>Open</span>
                   <ExternalLink className="w-3 h-3" />
@@ -68,7 +93,7 @@ export function VaultDetailPanel({
               )}
               <button
                 onClick={(e) => onToggleBookmark(currentItem.id, !!currentItem.bookmarked, e)}
-                className="text-neutral-500 hover:text-neutral-955 flex items-center space-x-0.5 text-[10px] font-mono font-bold"
+                className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-[10px] font-bold font-mono text-neutral-700 transition hover:border-neutral-300 hover:text-neutral-950"
                 title="Bookmark asset"
               >
                 <Bookmark className={cn('w-3 h-3', currentItem.bookmarked ? 'fill-neutral-900 text-neutral-900' : 'text-neutral-400')} />
@@ -78,7 +103,7 @@ export function VaultDetailPanel({
                 <>
                   <button
                     onClick={(e) => onRestoreItem(currentItem.id, e)}
-                    className="text-emerald-700 hover:text-emerald-800 flex items-center space-x-0.5 text-[10px] font-mono font-bold"
+                    className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold font-mono text-emerald-700 transition hover:bg-emerald-100"
                     title="Restore entry"
                   >
                     <RotateCcw className="w-3 h-3" />
@@ -86,17 +111,17 @@ export function VaultDetailPanel({
                   </button>
                   <button
                     onClick={(e) => onPermanentDeleteItem(currentItem.id, e)}
-                    className="text-red-650 hover:text-red-705 flex items-center space-x-0.5 text-[10px] font-mono font-bold"
+                    className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] font-bold font-mono text-red-700 transition hover:bg-red-100"
                     title="Delete forever"
                   >
                     <Trash2 className="w-3 h-3" />
-                    <span>Delete Forever</span>
+                    <span>Delete</span>
                   </button>
                 </>
               ) : (
                 <button
                   onClick={(e) => onDeleteItem(currentItem.id, e)}
-                  className="text-red-650 hover:text-red-705 flex items-center space-x-0.5 text-[10px] font-mono font-bold"
+                  className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] font-bold font-mono text-red-700 transition hover:bg-red-100"
                   title="Delete entry"
                 >
                   <Trash2 className="w-3 h-3" />
@@ -106,7 +131,7 @@ export function VaultDetailPanel({
               {!isTrashView && currentItem.processingStatus === 'failed' && (
                 <button
                   onClick={(e) => onRetryItem(currentItem.id, e)}
-                  className="text-amber-700 hover:text-amber-800 flex items-center space-x-0.5 text-[10px] font-mono font-bold"
+                  className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold font-mono text-amber-700 transition hover:bg-amber-100"
                   title="Retry processing"
                 >
                   <RefreshCw className="w-3 h-3" />
@@ -147,6 +172,17 @@ export function VaultDetailPanel({
           <div className="text-[9px] font-bold font-mono tracking-widest uppercase text-neutral-500">EXECUTIVE TAKEAWAY</div>
           <p className="text-neutral-700 text-xs leading-relaxed italic">&ldquo;{currentItem.summary}&rdquo;</p>
         </div>
+
+        {currentItem.extractedText && currentItem.extractedText.trim() && (
+          <div className="bg-neutral-50 border border-neutral-200 p-4 rounded-xl space-y-2">
+            <div className="text-[9px] font-bold font-mono tracking-widest uppercase text-neutral-500">
+              {currentItem.type === 'Voice Notes' ? 'FULL TRANSCRIPT' : currentItem.type === 'Images' ? 'OCR / EXTRACTED TEXT' : 'EXTRACTED TEXT'}
+            </div>
+            <div className="max-h-44 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-3 text-xs leading-relaxed text-neutral-700">
+              {currentItem.extractedText}
+            </div>
+          </div>
+        )}
 
         <div className="bg-neutral-50 border border-neutral-200 p-4 rounded-xl space-y-3.5">
           <div className="text-[9px] font-extrabold font-mono tracking-widest uppercase text-neutral-500 flex justify-between items-center">
@@ -212,16 +248,29 @@ export function VaultDetailPanel({
             <div className="space-y-2">
               {currentItem.fileUrl ? (
                 <div className="space-y-2">
-                  <iframe src={`${currentItem.fileUrl}#toolbar=0`} className="w-full h-48 rounded-lg border border-neutral-200 shadow-sm bg-white" title="PDF Document Viewer" />
+                  <div className="rounded-lg border border-neutral-200 shadow-sm bg-white overflow-hidden">
+                    <object data={`${currentItem.fileUrl}#toolbar=0&navpanes=0&scrollbar=1`} type="application/pdf" className="w-full h-[28rem] bg-neutral-50">
+                      <iframe src={`${currentItem.fileUrl}#toolbar=0&navpanes=0&scrollbar=1`} className="w-full h-[28rem] bg-white" title="PDF Document Viewer" />
+                    </object>
+                  </div>
                   <div className="flex justify-between items-center pt-1 border-t border-neutral-100">
                     <span className="text-[9px] text-neutral-400 font-mono">Secure PDF Reader</span>
-                    <a
-                      href={currentItem.fileUrl}
-                      download={currentItem.fileName || 'knowledge-paper.pdf'}
-                      className="text-[9px] font-mono hover:underline font-bold text-neutral-900"
-                    >
-                      Download file
-                    </a>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setIsPdfPreviewOpen(true)}
+                        className="text-[9px] font-mono font-bold text-neutral-900 hover:underline"
+                      >
+                        Fullscreen preview
+                      </button>
+                      <a
+                        href={currentItem.fileUrl}
+                        download={currentItem.fileName || 'knowledge-paper.pdf'}
+                        className="text-[9px] font-mono hover:underline font-bold text-neutral-900"
+                      >
+                        Download file
+                      </a>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -403,6 +452,41 @@ export function VaultDetailPanel({
           <div>INDEX_STAMP: {new Date(currentItem.createdAtDate).toDateString()}</div>
         </div>
       </div>
+
+      {currentItem.type === 'PDFs' && currentItem.fileUrl && isPdfPreviewOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-neutral-950/80 p-4">
+          <div className="relative flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-neutral-800 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold font-mono uppercase tracking-[0.24em] text-neutral-400">PDF Fullscreen Preview</div>
+                <div className="truncate text-sm font-semibold text-neutral-900">{currentItem.title}</div>
+              </div>
+              <div className="flex items-center gap-3">
+                <a
+                  href={currentItem.fileUrl}
+                  download={currentItem.fileName || 'knowledge-paper.pdf'}
+                  className="text-[10px] font-mono font-bold text-neutral-700 hover:text-neutral-950"
+                >
+                  Download
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setIsPdfPreviewOpen(false)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-200 text-neutral-600 transition hover:text-neutral-950"
+                  title="Close PDF preview"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 bg-neutral-100">
+              <object data={`${currentItem.fileUrl}#toolbar=1&navpanes=0&scrollbar=1`} type="application/pdf" className="h-full w-full">
+                <iframe src={`${currentItem.fileUrl}#toolbar=1&navpanes=0&scrollbar=1`} className="h-full w-full bg-white" title="Fullscreen PDF Preview" />
+              </object>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

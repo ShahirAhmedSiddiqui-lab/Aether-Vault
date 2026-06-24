@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { motion } from 'motion/react';
-import { Activity, ArrowRight, Bookmark, Inbox, LoaderCircle, RefreshCw, RotateCcw, Trash2, X } from 'lucide-react';
+import { Activity, ArrowRight, Bookmark, ChevronDown, Inbox, LoaderCircle, RefreshCw, RotateCcw, Trash2, X } from 'lucide-react';
 import { KnowledgeItem } from '@/lib/db';
 import { matchesSearch } from '@/lib/supabase/vault';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,10 @@ type VaultContentPanelProps = {
   items: KnowledgeItem[];
   isTrashView: boolean;
   searchQuery: string;
+  filterReferenceTime: number;
+  typeFilter: 'All' | KnowledgeItem['type'];
+  recencyFilter: 'any' | 'today' | '7d' | '30d' | '90d';
+  bookmarkFilter: 'all' | 'bookmarked' | 'unbookmarked';
   selectedItemId: string;
   inlineInput: string;
   isInlineGenerating: boolean;
@@ -21,6 +25,9 @@ type VaultContentPanelProps = {
   localAskLoading: boolean;
   onInlineInputChange: (value: string) => void;
   onLocalAskQueryChange: (value: string) => void;
+  onTypeFilterChange: (value: 'All' | KnowledgeItem['type']) => void;
+  onRecencyFilterChange: (value: 'any' | 'today' | '7d' | '30d' | '90d') => void;
+  onBookmarkFilterChange: (value: 'all' | 'bookmarked' | 'unbookmarked') => void;
   onInlineCapture: (event: React.FormEvent) => void;
   onRunLocalAskAI: (event: React.FormEvent) => void;
   onClearLocalAskAnswer: () => void;
@@ -37,6 +44,10 @@ export function VaultContentPanel({
   items,
   isTrashView,
   searchQuery,
+  filterReferenceTime,
+  typeFilter,
+  recencyFilter,
+  bookmarkFilter,
   selectedItemId,
   inlineInput,
   isInlineGenerating,
@@ -45,6 +56,9 @@ export function VaultContentPanel({
   localAskLoading,
   onInlineInputChange,
   onLocalAskQueryChange,
+  onTypeFilterChange,
+  onRecencyFilterChange,
+  onBookmarkFilterChange,
   onInlineCapture,
   onRunLocalAskAI,
   onClearLocalAskAnswer,
@@ -55,9 +69,18 @@ export function VaultContentPanel({
   onPermanentDeleteItem,
   onRetryItem,
 }: VaultContentPanelProps) {
+  const [isFiltersOpen, setIsFiltersOpen] = React.useState(false);
+  const itemTabs: KnowledgeItem['type'][] = ['Articles', 'Videos', 'PDFs', 'Images', 'Social Links', 'Voice Notes'];
+  const effectiveTypeFilter = itemTabs.includes(currentTab as KnowledgeItem['type'])
+    ? (currentTab as KnowledgeItem['type'])
+    : typeFilter === 'All'
+      ? null
+      : typeFilter;
+  const effectiveBookmarkFilter = currentTab === 'Bookmarks' ? 'bookmarked' : bookmarkFilter;
+
   const filteredItems = React.useMemo(
-    () =>
-      items.filter((item) => {
+    () => {
+      return items.filter((item) => {
         const matchesTab =
           currentTab === 'Overview'
             ? !item.deletedAt
@@ -66,10 +89,29 @@ export function VaultContentPanel({
               : currentTab === 'Trash'
                 ? !!item.deletedAt
                 : !item.deletedAt && item.type === currentTab;
+        const matchesType = !effectiveTypeFilter || item.type === effectiveTypeFilter;
+        const matchesBookmark =
+          effectiveBookmarkFilter === 'all'
+            ? true
+            : effectiveBookmarkFilter === 'bookmarked'
+              ? !!item.bookmarked
+              : !item.bookmarked;
+        const itemAgeMs = filterReferenceTime - new Date(item.createdAtDate).getTime();
+        const matchesRecency =
+          recencyFilter === 'any'
+            ? true
+            : recencyFilter === 'today'
+              ? itemAgeMs <= 24 * 60 * 60 * 1000
+              : recencyFilter === '7d'
+                ? itemAgeMs <= 7 * 24 * 60 * 60 * 1000
+                : recencyFilter === '30d'
+                  ? itemAgeMs <= 30 * 24 * 60 * 60 * 1000
+                  : itemAgeMs <= 90 * 24 * 60 * 60 * 1000;
         const matchesQuery = !searchQuery.trim() || matchesSearch(item, searchQuery);
-        return matchesTab && matchesQuery;
-      }),
-    [currentTab, items, searchQuery]
+        return matchesTab && matchesType && matchesBookmark && matchesRecency && matchesQuery;
+      });
+    },
+    [currentTab, effectiveBookmarkFilter, effectiveTypeFilter, filterReferenceTime, items, recencyFilter, searchQuery]
   );
 
   const weeklyActivity = React.useMemo(() => {
@@ -84,6 +126,10 @@ export function VaultContentPanel({
       nextDate.setDate(date.getDate() + 1);
 
       const count = items.filter((item) => {
+        if (item.deletedAt) {
+          return false;
+        }
+
         const createdAt = new Date(item.createdAtDate);
         return createdAt >= date && createdAt < nextDate;
       }).length;
@@ -91,15 +137,23 @@ export function VaultContentPanel({
       return {
         label: labels[date.getDay()],
         count,
+        dateLabel: date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
       };
     });
 
     const maxCount = dailyCounts.reduce((currentMax, entry) => Math.max(currentMax, entry.count), 0);
+    const total = dailyCounts.reduce((sum, entry) => sum + entry.count, 0);
+    const busiestDay = dailyCounts.reduce((top, entry) => (entry.count > top.count ? entry : top), dailyCounts[0]);
 
-    return dailyCounts.map((entry) => ({
-      ...entry,
-      height: maxCount === 0 ? 8 : Math.max(8, Math.round((entry.count / maxCount) * 100)),
-    }));
+    return {
+      points: dailyCounts.map((entry) => ({
+        ...entry,
+        heightPx: maxCount === 0 ? 8 : Math.max(8, Math.round((entry.count / maxCount) * 72)),
+      })),
+      total,
+      maxCount,
+      busiestDay,
+    };
   }, [items]);
 
   return (
@@ -119,7 +173,73 @@ export function VaultContentPanel({
             {filteredItems.length} total elements saved
           </p>
         </div>
+
+        {currentTab === 'Overview' && (
+          <button
+            type="button"
+            onClick={() => setIsFiltersOpen((prev) => !prev)}
+            className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-neutral-700 shadow-sm transition hover:border-neutral-300 hover:text-neutral-950"
+          >
+            <span>Filters</span>
+            <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-mono tracking-normal text-neutral-500">{filteredItems.length}</span>
+            <ChevronDown className={cn('h-3.5 w-3.5 transition', isFiltersOpen ? 'rotate-180' : '')} />
+          </button>
+        )}
       </div>
+
+      {currentTab === 'Overview' && isFiltersOpen && (
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-5 rounded-2xl border border-neutral-200/90 bg-white p-3 shadow-sm"
+        >
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+            <label className="space-y-1 text-left">
+              <span className="block text-[9px] font-bold font-mono uppercase tracking-wider text-neutral-400">Type</span>
+              <select
+                value={effectiveTypeFilter ?? 'All'}
+                onChange={(e) => onTypeFilterChange(e.target.value as 'All' | KnowledgeItem['type'])}
+                className="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-2 text-[11px] text-neutral-800 focus:border-neutral-900 focus:bg-white focus:outline-none"
+              >
+                <option value="All">All capture types</option>
+                {itemTabs.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1 text-left">
+              <span className="block text-[9px] font-bold font-mono uppercase tracking-wider text-neutral-400">Recency</span>
+              <select
+                value={recencyFilter}
+                onChange={(e) => onRecencyFilterChange(e.target.value as 'any' | 'today' | '7d' | '30d' | '90d')}
+                className="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-2 text-[11px] text-neutral-800 focus:border-neutral-900 focus:bg-white focus:outline-none"
+              >
+                <option value="any">All time</option>
+                <option value="today">Today</option>
+                <option value="7d">Last 7 days</option>
+                <option value="30d">Last 30 days</option>
+                <option value="90d">Last 90 days</option>
+              </select>
+            </label>
+
+            <label className="space-y-1 text-left">
+              <span className="block text-[9px] font-bold font-mono uppercase tracking-wider text-neutral-400">Bookmarks</span>
+              <select
+                value={effectiveBookmarkFilter}
+                onChange={(e) => onBookmarkFilterChange(e.target.value as 'all' | 'bookmarked' | 'unbookmarked')}
+                className="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-2 text-[11px] text-neutral-800 focus:border-neutral-900 focus:bg-white focus:outline-none"
+              >
+                <option value="all">All items</option>
+                <option value="bookmarked">Bookmarked only</option>
+                <option value="unbookmarked">Not bookmarked</option>
+              </select>
+            </label>
+          </div>
+        </motion.div>
+      )}
 
       {currentTab === 'Overview' && (
         <form
@@ -158,26 +278,30 @@ export function VaultContentPanel({
         <>
           <form
             onSubmit={onRunLocalAskAI}
-            className="bg-emerald-50/50 border border-emerald-150/70 p-3 rounded-xl mb-6 flex gap-3 items-center text-left"
+            className="bg-emerald-50/50 border border-emerald-150/70 p-3 rounded-xl mb-6 flex flex-col gap-3 text-left md:flex-row md:items-center"
           >
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-550 shrink-0 ml-1 block" />
-            <span className="text-[10px] font-bold font-mono text-emerald-700 uppercase tracking-widest block shrink-0 select-none">
-              Brain Search:
-            </span>
-            <input
-              type="text"
-              placeholder='Ask instant questions across these overview items... e.g., "What was the supply chain idea?"'
-              value={localAskQuery}
-              onChange={(e) => onLocalAskQueryChange(e.target.value)}
-              className="flex-1 bg-transparent border-none text-xs text-neutral-800 placeholder-emerald-700/50 focus:outline-none"
-            />
-            <button
-              type="submit"
-              disabled={localAskLoading || !localAskQuery.trim()}
-              className="bg-neutral-900 text-white font-mono text-[10px] px-3.5 py-1 rounded-lg transition hover:bg-neutral-800 disabled:opacity-50"
-            >
-              {localAskLoading ? 'CONSULTING...' : 'QUERY'}
-            </button>
+            <div className="flex items-center gap-2 md:shrink-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-550 shrink-0 block" />
+              <span className="text-[10px] font-bold font-mono text-emerald-700 uppercase tracking-widest block select-none">
+                Brain Search:
+              </span>
+            </div>
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <input
+                type="text"
+                placeholder='Ask instant questions across these overview items... e.g., "What was the supply chain idea?"'
+                value={localAskQuery}
+                onChange={(e) => onLocalAskQueryChange(e.target.value)}
+                className="min-w-0 flex-1 bg-transparent border-none text-xs text-neutral-800 placeholder-emerald-700/50 focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={localAskLoading || !localAskQuery.trim()}
+                className="shrink-0 rounded-lg bg-neutral-900 px-3.5 py-1 text-[10px] font-mono text-white transition hover:bg-neutral-800 disabled:opacity-50"
+              >
+                {localAskLoading ? 'CONSULTING...' : 'QUERY'}
+              </button>
+            </div>
           </form>
 
           {localAskAnswer && (
@@ -335,26 +459,43 @@ export function VaultContentPanel({
 
           <div className="bg-white border border-neutral-200/90 rounded-xl p-5 flex flex-col md:flex-row gap-6 justify-between items-center shadow-xs">
             <div className="space-y-1 md:w-1/3">
-              <div className="text-2xl font-bold tracking-tight text-neutral-900 leading-none">{items.length}</div>
+              <div className="text-2xl font-bold tracking-tight text-neutral-900 leading-none">{items.filter((item) => !item.deletedAt).length}</div>
               <p className="text-[10px] text-neutral-400 font-mono uppercase tracking-wider">active second mind assets</p>
               <p className="text-[11px] text-neutral-500 max-w-xs">Dynamic count of notes, links, PDFs, images, audio, and saved research assets indexed.</p>
+              <div className="pt-2 space-y-1 text-[10px] font-mono text-neutral-400">
+                <div>{weeklyActivity.total} captures added in the last 7 days</div>
+                <div>
+                  Peak day: {weeklyActivity.busiestDay.label} ({weeklyActivity.busiestDay.count})
+                </div>
+              </div>
             </div>
 
-            <div className="flex-1 w-full bg-neutral-50/50 p-3 rounded-lg flex flex-col justify-between">
-              <div className="w-full flex justify-between items-end h-12 px-1">
-                {weeklyActivity.map((entry) => (
-                  <div key={entry.label} className="flex flex-col items-center flex-1">
+            <div className="flex-1 w-full bg-neutral-50/50 p-4 rounded-lg border border-neutral-100">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-[10px] font-bold font-mono uppercase tracking-widest text-neutral-400">7-day capture chart</div>
+                <div className="text-[10px] font-mono text-neutral-400">
+                  max {weeklyActivity.maxCount}
+                </div>
+              </div>
+
+              <div className="w-full flex justify-between items-end h-24 gap-2 px-1">
+                {weeklyActivity.points.map((entry) => (
+                  <div key={entry.label} className="flex flex-col items-center justify-end flex-1 min-w-0 h-full">
+                    <div className="mb-2 text-[9px] font-mono text-neutral-500">{entry.count}</div>
                     <div
-                      className="w-3 rounded-t-sm transition-all duration-300 bg-neutral-200 hover:bg-neutral-900 min-h-[4px]"
-                      style={{ height: `${entry.height}%` }}
-                      title={`${entry.count} addition${entry.count === 1 ? '' : 's'}`}
+                      className="w-full max-w-8 rounded-t-md transition-all duration-300 bg-gradient-to-t from-neutral-900 to-neutral-300 hover:from-neutral-800 hover:to-neutral-500 min-h-[8px]"
+                      style={{ height: `${entry.heightPx}px` }}
+                      title={`${entry.dateLabel}: ${entry.count} addition${entry.count === 1 ? '' : 's'}`}
                     />
                   </div>
                 ))}
               </div>
-              <div className="flex justify-between text-[8px] font-mono leading-none tracking-widest text-neutral-400 px-1 border-t border-neutral-150 pt-2 mt-1">
-                {weeklyActivity.map((entry) => (
-                  <span key={entry.label}>{entry.label}</span>
+
+              <div className="flex justify-between text-[8px] font-mono leading-none tracking-widest text-neutral-400 px-1 border-t border-neutral-150 pt-3 mt-3">
+                {weeklyActivity.points.map((entry) => (
+                  <span key={entry.label} title={entry.dateLabel}>
+                    {entry.label}
+                  </span>
                 ))}
               </div>
             </div>

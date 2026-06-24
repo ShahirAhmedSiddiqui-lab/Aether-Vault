@@ -1,5 +1,5 @@
 import { type SupabaseClient } from '@supabase/supabase-js';
-import { summarizeAndExtract } from '@/lib/gemini';
+import { generateKnowledgeItemAnalysis } from '@/lib/ai/service';
 import { type KnowledgeItem } from '@/lib/db';
 import { VAULT_BUCKET } from '@/lib/supabase/vault';
 import {
@@ -365,7 +365,7 @@ async function processItem(
 ) {
   try {
     const analysisText = getProcessingSourceText(item, options.overrideContent, options.fileData);
-    const aiAnalysis = await summarizeAndExtract(
+    const aiAnalysis = await generateKnowledgeItemAnalysis(
       analysisText,
       item.url ?? undefined,
       item.item_type,
