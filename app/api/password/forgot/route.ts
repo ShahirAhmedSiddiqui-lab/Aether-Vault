@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { resolveBaseUrlFromRequest } from '@/lib/site-url';
+import { SUPABASE_PASSWORD_RESET_REDIRECT_URL } from '@/lib/supabase/auth-redirects';
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,13 +12,12 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = await createClient();
-    const redirectTo = new URL('/reset-password', resolveBaseUrlFromRequest(req)).toString();
     const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-      redirectTo,
+      redirectTo: SUPABASE_PASSWORD_RESET_REDIRECT_URL,
     });
 
     if (error) {
-      console.error('Failed to request password reset email:', error);
+      console.error('Reset password error:', error.message);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 

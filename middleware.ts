@@ -1,7 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 function isPublicPath(pathname: string) {
-  return pathname === '/' || pathname.startsWith('/login') || pathname.startsWith('/api') || pathname.startsWith('/_next');
+  return pathname === '/'
+    || pathname.startsWith('/login')
+    || pathname.startsWith('/reset-password')
+    || pathname.startsWith('/auth')
+    || pathname.startsWith('/api')
+    || pathname.startsWith('/_next');
 }
 
 function hasSupabaseSessionCookie(request: NextRequest) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { resolveBaseUrlFromRequest } from '@/lib/site-url';
+import { SUPABASE_EMAIL_CONFIRMATION_REDIRECT_URL } from '@/lib/supabase/auth-redirects';
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,12 +19,11 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = await createClient();
-    const baseUrl = resolveBaseUrlFromRequest(req);
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
       password: normalizedPassword,
       options: {
-        emailRedirectTo: new URL('/login', baseUrl).toString(),
+        emailRedirectTo: SUPABASE_EMAIL_CONFIRMATION_REDIRECT_URL,
         data: {
           full_name: normalizedName || undefined,
           name: normalizedName || undefined,
@@ -33,6 +32,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (error) {
+      console.error('Signup error:', error.message);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 

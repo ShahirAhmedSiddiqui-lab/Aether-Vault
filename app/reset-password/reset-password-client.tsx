@@ -2,11 +2,13 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft, RefreshCcw } from 'lucide-react';
 import { BrandLockup } from '@/app/_components/brand-lockup';
 import { createClient } from '@/lib/supabase/client';
 
 export function ResetPasswordClient() {
+  const router = useRouter();
   const [mode, setMode] = React.useState<'request' | 'update'>('request');
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
@@ -20,6 +22,38 @@ export function ResetPasswordClient() {
 
     const bootstrap = async () => {
       const hash = window.location.hash.toLowerCase();
+      const search = new URLSearchParams(window.location.search);
+      const tokenHash = search.get('token_hash');
+      const type = search.get('type');
+      const code = search.get('code');
+
+      if (tokenHash && type) {
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: type as 'recovery' | 'email' | 'signup' | 'invite' | 'email_change' | 'magiclink',
+        });
+
+        if (verifyError) {
+          setError('This reset link is invalid or has expired. Request a fresh one and try again.');
+          return;
+        }
+
+        setMode('update');
+        return;
+      }
+
+      if (code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+
+        if (exchangeError) {
+          setError('This reset link is invalid or has expired. Request a fresh one and try again.');
+          return;
+        }
+
+        setMode('update');
+        return;
+      }
+
       if (hash.includes('type=recovery')) {
         setMode('update');
         return;
@@ -103,7 +137,11 @@ export function ResetPasswordClient() {
         throw updateError;
       }
 
-      setFeedback('Password updated successfully. You can return to login now.');
+      await supabase.auth.signOut();
+      setFeedback('Password updated successfully. Redirecting to login...');
+      window.setTimeout(() => {
+        router.replace('/login?message=Password%20updated%20successfully.%20Please%20log%20in%20with%20your%20new%20password.');
+      }, 900);
     } catch (updateError) {
       console.error(updateError);
       setError(updateError instanceof Error ? updateError.message : 'Unable to update password.');
@@ -137,7 +175,7 @@ export function ResetPasswordClient() {
             <p className="text-sm leading-7 text-neutral-600">
               {mode === 'request'
                 ? 'Enter your email and we will send you a secure recovery link.'
-                : 'Finish the recovery flow by setting a fresh password for your Memora account.'}
+                : 'Finish the recovery flow by setting a fresh password for your Memora account. After saving, we will send you back to login.'}
             </p>
           </div>
 

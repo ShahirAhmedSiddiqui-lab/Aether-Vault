@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { resolveBaseUrlFromHeaders } from '@/lib/site-url';
+import { SUPABASE_EMAIL_CONFIRMATION_REDIRECT_URL } from '@/lib/supabase/auth-redirects';
 
 function redirectWithMessage(message: string) {
   redirect(`/login?message=${encodeURIComponent(message)}`);
@@ -41,13 +41,12 @@ export async function signup(formData: FormData) {
     redirectWithMessage('Password must be at least 6 characters long.');
   }
 
-  const origin = await resolveBaseUrlFromHeaders();
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      emailRedirectTo: new URL('/login', origin).toString(),
+      emailRedirectTo: SUPABASE_EMAIL_CONFIRMATION_REDIRECT_URL,
       data: {
         full_name: name || undefined,
         name: name || undefined,
@@ -56,6 +55,7 @@ export async function signup(formData: FormData) {
   });
 
   if (error) {
+    console.error('Signup error:', error.message);
     redirectWithMessage(error.message);
   }
 
