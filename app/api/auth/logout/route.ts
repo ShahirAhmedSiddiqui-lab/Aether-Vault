@@ -1,13 +1,17 @@
-import { NextResponse } from 'next/server';
+import { apiSuccess, handleApiRouteError } from '@/lib/api/errors';
 import { createClient } from '@/lib/supabase/server';
 
 export async function POST() {
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signOut();
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.signOut();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      throw error;
+    }
+
+    return apiSuccess({ success: true });
+  } catch (error) {
+    return handleApiRouteError(error, 'auth.logout');
   }
-
-  return NextResponse.json({ success: true });
 }

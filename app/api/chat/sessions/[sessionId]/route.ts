@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { apiSuccess, handleApiRouteError, unauthorized } from '@/lib/api/errors';
+import { readUuid } from '@/lib/api/validation';
 import { createClient } from '@/lib/supabase/server';
 import { assertChatSessionOwnership } from '@/lib/vault/chat';
 
@@ -11,24 +12,24 @@ export async function DELETE(_: Request, context: { params: Promise<{ sessionId:
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return unauthorized();
     }
 
-    await assertChatSessionOwnership(supabase, user.id, sessionId);
+    const normalizedSessionId = readUuid(sessionId, 'Session id');
+    await assertChatSessionOwnership(supabase, user.id, normalizedSessionId);
 
     const { error } = await supabase
       .from('chat_sessions')
       .delete()
-      .eq('id', sessionId)
+      .eq('id', normalizedSessionId)
       .eq('user_id', user.id);
 
     if (error) {
       throw error;
     }
 
-    return NextResponse.json({ success: true });
+    return apiSuccess({ success: true });
   } catch (error) {
-    console.error('Failed to delete chat session:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return handleApiRouteError(error, 'chat.sessions.delete');
   }
 }

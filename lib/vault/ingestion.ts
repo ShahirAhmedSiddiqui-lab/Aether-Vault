@@ -2,6 +2,7 @@ import { type SupabaseClient } from '@supabase/supabase-js';
 import { generateKnowledgeItemAnalysis } from '@/lib/ai/service';
 import { type KnowledgeItem } from '@/lib/db';
 import { VAULT_BUCKET } from '@/lib/supabase/vault';
+import { validateVaultUpload } from '@/lib/vault/uploads';
 import {
   buildPreviewMetadata,
   deriveSourceLabel,
@@ -76,6 +77,7 @@ export async function createAndProcessItem(
   userId: string,
   input: ItemDraftInput
 ) {
+  validateVaultUpload(input.fileData);
   const draft = prepareItemDraft(input);
   const insertedRow = await insertPendingItem(supabase, userId, draft, input.fileData);
 
@@ -106,6 +108,7 @@ export async function createPendingItem(
   userId: string,
   input: ItemDraftInput
 ) {
+  validateVaultUpload(input.fileData);
   const draft = prepareItemDraft(input);
   const insertedRow = await insertPendingItem(supabase, userId, draft, input.fileData);
 

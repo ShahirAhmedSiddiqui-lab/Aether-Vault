@@ -1,4 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, handleApiRouteError, unauthorized } from '@/lib/api/errors';
+import { logApiEvent } from '@/lib/api/logging';
+import { enforceRateLimit } from '@/lib/api/rate-limit';
+import {
+  ensureObject,
+  readJsonBody,
+  readOptionalBoolean,
+  readRequiredString,
+  readUuid,
+} from '@/lib/api/validation';
 import { generateVaultChatAnswer } from '@/lib/ai/service';
 import { createClient } from '@/lib/supabase/server';
 import { mapChatMessage, mapKnowledgeItem } from '@/lib/supabase/vault';
@@ -18,14 +28,14 @@ export async function GET(_: NextRequest, context: { params: Promise<{ sessionId
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return unauthorized();
     }
 
-    const messages = await getChatMessages(supabase, user.id, sessionId);
-    return NextResponse.json(messages);
+    const normalizedSessionId = readUuid(sessionId, 'Session id');
+    const messages = await getChatMessages(supabase, user.id, normalizedSessionId);
+    return apiSuccess(messages);
   } catch (error) {
-    console.error('Failed to get chat messages:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return handleApiRouteError(error, 'chat.messages.list');
   }
 }
 
@@ -38,23 +48,34 @@ export async function POST(req: NextRequest, context: { params: Promise<{ sessio
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return unauthorized();
     }
 
-    const { query, persist = true } = await req.json();
+    enforceRateLimit({
+      key: `chat:session:${user.id}`,
+      limit: 20,
+      windowMs: 60_000,
+      message: 'Too many chat requests. Please wait a minute and try again.',
+      code: 'chat_rate_limited',
+    });
 
-    if (typeof query !== 'string' || !query.trim()) {
-      return NextResponse.json({ error: 'Query is required' }, { status: 400 });
-    }
+    const body = ensureObject(await readJsonBody(req));
+    const query = readRequiredString(body.query, {
+      field: 'Query',
+      minLength: 1,
+      maxLength: 2_000,
+    });
+    const persist = readOptionalBoolean(body.persist, 'persist') ?? true;
+    const normalizedSessionId = readUuid(sessionId, 'Session id');
 
-    await assertChatSessionOwnership(supabase, user.id, sessionId);
+    await assertChatSessionOwnership(supabase, user.id, normalizedSessionId);
 
     const [{ data: existingChats, error: chatError }, { data: itemRows, error: itemError }] = await Promise.all([
       supabase
         .from('chat_messages')
         .select('*')
         .eq('user_id', user.id)
-        .eq('session_id', sessionId)
+        .eq('session_id', normalizedSessionId)
         .order('created_at', { ascending: true }),
       supabase
         .from('knowledge_items')
@@ -80,18 +101,18 @@ export async function POST(req: NextRequest, context: { params: Promise<{ sessio
     const aiResponse = await generateVaultChatAnswer(query, items, formattedHistory);
 
     if (!persist) {
-      return NextResponse.json(
+      return apiSuccess(
         {
           userMessage: {
             id: `preview-user-${Date.now()}`,
-            sessionId,
+            sessionId: normalizedSessionId,
             role: 'user',
             content: query,
             createdAt: 'Just now',
           },
           modelMessage: {
             id: `preview-model-${Date.now()}`,
-            sessionId,
+            sessionId: normalizedSessionId,
             role: 'model',
             content: aiResponse.answer,
             summaryBlock: aiResponse.summaryBlock,
@@ -110,7 +131,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ sessio
       .insert([
         {
           user_id: user.id,
-          session_id: sessionId,
+          session_id: normalizedSessionId,
           role: 'user',
           content: query.trim(),
           summary_block: null,
@@ -119,7 +140,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ sessio
         },
         {
           user_id: user.id,
-          session_id: sessionId,
+          session_id: normalizedSessionId,
           role: 'model',
           content: aiResponse.answer,
           summary_block: aiResponse.summaryBlock ?? null,
@@ -133,11 +154,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ sessio
       throw insertError ?? new Error('Failed to persist chat messages.');
     }
 
-    await touchChatSession(supabase, sessionId, buildChatSessionTitle(query), lastMessageAt);
+    await touchChatSession(supabase, normalizedSessionId, buildChatSessionTitle(query), lastMessageAt);
 
     const [userMessage, modelMessage] = insertedMessages.map(mapChatMessage);
 
-    return NextResponse.json(
+    return apiSuccess(
       {
         userMessage,
         modelMessage,
@@ -145,8 +166,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ sessio
       { status: 201 }
     );
   } catch (error) {
-    console.error('Failed to send session message:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    logApiEvent('error', 'chat.messages.send.failed', {
+      cause: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return handleApiRouteError(error, 'chat.messages.send');
   }
 }
 
@@ -159,24 +182,24 @@ export async function DELETE(_: NextRequest, context: { params: Promise<{ sessio
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return unauthorized();
     }
 
-    await assertChatSessionOwnership(supabase, user.id, sessionId);
+    const normalizedSessionId = readUuid(sessionId, 'Session id');
+    await assertChatSessionOwnership(supabase, user.id, normalizedSessionId);
 
     const { error } = await supabase
       .from('chat_messages')
       .delete()
       .eq('user_id', user.id)
-      .eq('session_id', sessionId);
+      .eq('session_id', normalizedSessionId);
 
     if (error) {
       throw error;
     }
 
-    return NextResponse.json({ success: true, message: 'Chat session cleared' });
+    return apiSuccess({ success: true, message: 'Chat session cleared' });
   } catch (error) {
-    console.error('Failed to clear session messages:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return handleApiRouteError(error, 'chat.messages.clear');
   }
 }

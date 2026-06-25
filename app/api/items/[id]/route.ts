@@ -1,4 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { ApiRouteError, apiSuccess, handleApiRouteError, unauthorized } from '@/lib/api/errors';
+import { ensureObject, readJsonBody, readOptionalBoolean, readUuid } from '@/lib/api/validation';
 import { createClient } from '@/lib/supabase/server';
 import { mapKnowledgeItem, VAULT_BUCKET } from '@/lib/supabase/vault';
 
@@ -10,21 +12,22 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return unauthorized();
     }
 
     const { id } = await params;
+    const itemId = readUuid(id, 'Item id');
 
     const { data: item, error } = await supabase
       .from('knowledge_items')
       .select('*')
-      .eq('id', id)
+      .eq('id', itemId)
       .eq('user_id', user.id)
       .is('deleted_at', null)
       .single();
 
     if (error || !item) {
-      return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+      throw new ApiRouteError(404, 'Item not found', { code: 'not_found' });
     }
 
     let signedUrl: string | undefined;
@@ -33,10 +36,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       signedUrl = data?.signedUrl;
     }
 
-    return NextResponse.json(mapKnowledgeItem(item, signedUrl));
+    return apiSuccess(mapKnowledgeItem(item, signedUrl));
   } catch (error) {
-    console.error('Failed to get item:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return handleApiRouteError(error, 'items.get');
   }
 }
 
@@ -48,32 +50,34 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return unauthorized();
     }
 
     const { id } = await params;
-    const body = await req.json();
+    const itemId = readUuid(id, 'Item id');
+    const body = ensureObject(await readJsonBody(req));
     const updates: Record<string, unknown> = {};
 
-    if (typeof body.bookmarked === 'boolean') {
-      updates.bookmarked = body.bookmarked;
+    const bookmarked = readOptionalBoolean(body.bookmarked, 'bookmarked');
+    if (bookmarked !== undefined) {
+      updates.bookmarked = bookmarked;
     }
 
     if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: 'No supported updates provided' }, { status: 400 });
+      throw new ApiRouteError(400, 'No supported updates provided', { code: 'validation_error' });
     }
 
     const { data: item, error } = await supabase
       .from('knowledge_items')
       .update(updates)
-      .eq('id', id)
+      .eq('id', itemId)
       .eq('user_id', user.id)
       .is('deleted_at', null)
       .select('*')
       .single();
 
     if (error || !item) {
-      return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+      throw new ApiRouteError(404, 'Item not found', { code: 'not_found' });
     }
 
     let signedUrl: string | undefined;
@@ -82,10 +86,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       signedUrl = data?.signedUrl;
     }
 
-    return NextResponse.json(mapKnowledgeItem(item, signedUrl));
+    return apiSuccess(mapKnowledgeItem(item, signedUrl));
   } catch (error) {
-    console.error('Failed to update item:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return handleApiRouteError(error, 'items.update');
   }
 }
 
@@ -97,23 +100,24 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return unauthorized();
     }
 
     const { id } = await params;
+    const itemId = readUuid(id, 'Item id');
     const permanentDelete = req.nextUrl.searchParams.get('permanent') === 'true';
 
     if (permanentDelete) {
       const { data: existingItem, error: fetchError } = await supabase
         .from('knowledge_items')
         .select('*')
-        .eq('id', id)
+        .eq('id', itemId)
         .eq('user_id', user.id)
         .not('deleted_at', 'is', null)
         .single();
 
       if (fetchError || !existingItem) {
-        return NextResponse.json({ error: 'Trashed item not found' }, { status: 404 });
+        throw new ApiRouteError(404, 'Trashed item not found', { code: 'not_found' });
       }
 
       if (existingItem.file_path) {
@@ -127,18 +131,21 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       const { error: deleteError } = await supabase
         .from('knowledge_items')
         .delete()
-        .eq('id', id)
+        .eq('id', itemId)
         .eq('user_id', user.id)
         .not('deleted_at', 'is', null);
 
       if (deleteError) {
-        return NextResponse.json({ error: 'Failed to permanently delete item' }, { status: 500 });
+        throw new ApiRouteError(500, 'Failed to permanently delete item', {
+          code: 'delete_failed',
+          cause: deleteError,
+        });
       }
 
-      return NextResponse.json({
+      return apiSuccess({
         success: true,
         message: 'Item permanently deleted',
-        deletedId: id,
+        deletedId: itemId,
       });
     }
 
@@ -150,14 +157,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         processing_status: 'trashed',
         deleted_at: deletedAt,
       })
-      .eq('id', id)
+      .eq('id', itemId)
       .eq('user_id', user.id)
       .is('deleted_at', null)
       .select('*')
       .single();
 
     if (error || !deletedItem) {
-      return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+      throw new ApiRouteError(404, 'Item not found', { code: 'not_found' });
     }
 
     let signedUrl: string | undefined;
@@ -166,13 +173,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       signedUrl = data?.signedUrl;
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       success: true,
       message: 'Item moved to trash successfully',
       item: mapKnowledgeItem(deletedItem, signedUrl),
     });
   } catch (error) {
-    console.error('Failed to delete item:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return handleApiRouteError(error, 'items.delete');
   }
 }

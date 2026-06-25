@@ -1,16 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, handleApiRouteError } from '@/lib/api/errors';
+import { logApiEvent } from '@/lib/api/logging';
+import { enforceRateLimit, getClientIp } from '@/lib/api/rate-limit';
+import { ensureObject, readEmail, readJsonBody, readRequiredString } from '@/lib/api/validation';
 import { createClient } from '@/lib/supabase/server';
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, password } = await req.json();
+    const body = ensureObject(await readJsonBody(req));
+    const normalizedEmail = readEmail(body.email, 'Email');
+    const normalizedPassword = readRequiredString(body.password, {
+      field: 'Password',
+      minLength: 1,
+      maxLength: 1024,
+      trim: false,
+    });
+    const ip = getClientIp(req);
 
-    const normalizedEmail = String(email ?? '').trim();
-    const normalizedPassword = String(password ?? '').trim();
-
-    if (!normalizedEmail || !normalizedPassword) {
-      return NextResponse.json({ error: 'Email and password are required.' }, { status: 400 });
-    }
+    enforceRateLimit({
+      key: `auth:login:${ip}:${normalizedEmail}`,
+      limit: 5,
+      windowMs: 60_000,
+      message: 'Too many login attempts. Please wait a minute and try again.',
+      code: 'login_rate_limited',
+    });
 
     const supabase = await createClient();
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -25,10 +38,16 @@ export async function POST(req: NextRequest) {
         ? 'Confirm your email before logging in. Check your inbox for the verification message.'
         : error.message;
 
-      return NextResponse.json({ error: message }, { status });
+      logApiEvent('warn', 'auth.login.rejected', {
+        ip,
+        status,
+        code: normalizedErrorMessage.includes('email not confirmed') ? 'email_not_confirmed' : 'invalid_login',
+      });
+
+      return NextResponse.json({ error: message, code: normalizedErrorMessage.includes('email not confirmed') ? 'email_not_confirmed' : 'invalid_login' }, { status });
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       success: true,
       user: data.user
         ? {
@@ -38,7 +57,8 @@ export async function POST(req: NextRequest) {
         : null,
     });
   } catch (error) {
-    console.error('Failed to log in:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return handleApiRouteError(error, 'auth.login', {
+      ip: getClientIp(req),
+    });
   }
 }

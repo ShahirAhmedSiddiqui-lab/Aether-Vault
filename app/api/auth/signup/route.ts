@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { type User } from '@supabase/supabase-js';
+import { apiSuccess, handleApiRouteError } from '@/lib/api/errors';
+import { logApiEvent } from '@/lib/api/logging';
+import { enforceRateLimit, getClientIp } from '@/lib/api/rate-limit';
+import { ensureObject, readEmail, readJsonBody, readOptionalString, readRequiredString } from '@/lib/api/validation';
 import { createClient } from '@/lib/supabase/server';
 import { SUPABASE_EMAIL_CONFIRMATION_REDIRECT_URL } from '@/lib/supabase/auth-redirects';
 
@@ -9,19 +13,28 @@ function isExistingSignupAttempt(user: User | null) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, password, fullName, name } = await req.json();
+    const body = ensureObject(await readJsonBody(req));
+    const normalizedEmail = readEmail(body.email, 'Email');
+    const normalizedPassword = readRequiredString(body.password, {
+      field: 'Password',
+      minLength: 6,
+      maxLength: 1024,
+      trim: false,
+    });
+    const normalizedName =
+      readOptionalString(body.fullName ?? body.name, {
+        field: 'Full name',
+        maxLength: 80,
+      })?.replace(/\s+/g, ' ') ?? '';
+    const ip = getClientIp(req);
 
-    const normalizedEmail = String(email ?? '').trim();
-    const normalizedPassword = String(password ?? '').trim();
-    const normalizedName = String(fullName ?? name ?? '').trim();
-
-    if (!normalizedEmail || !normalizedPassword) {
-      return NextResponse.json({ error: 'Email and password are required.' }, { status: 400 });
-    }
-
-    if (normalizedPassword.length < 6) {
-      return NextResponse.json({ error: 'Password must be at least 6 characters long.' }, { status: 400 });
-    }
+    enforceRateLimit({
+      key: `auth:signup:${ip}:${normalizedEmail}`,
+      limit: 3,
+      windowMs: 60_000,
+      message: 'Too many signup attempts. Please wait a minute and try again.',
+      code: 'signup_rate_limited',
+    });
 
     const supabase = await createClient();
     const { data, error } = await supabase.auth.signUp({
@@ -37,7 +50,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (error) {
-      console.error('Signup error:', error.message);
+      logApiEvent('warn', 'auth.signup.rejected', {
+        ip,
+        code: 'signup_failed',
+      });
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
@@ -51,7 +67,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       success: true,
       requiresEmailConfirmation: !data.session,
       message: data.session
@@ -65,7 +81,8 @@ export async function POST(req: NextRequest) {
         : null,
     });
   } catch (error) {
-    console.error('Failed to sign up:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return handleApiRouteError(error, 'auth.signup', {
+      ip: getClientIp(req),
+    });
   }
 }

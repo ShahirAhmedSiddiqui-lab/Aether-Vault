@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, handleApiRouteError, unauthorized } from '@/lib/api/errors';
+import { ensureObject, readJsonBody, readOptionalBoolean, readOptionalString } from '@/lib/api/validation';
 import { createClient } from '@/lib/supabase/server';
 import { createChatSession, getOrCreateLatestChatSession, listChatSessions } from '@/lib/vault/chat';
 
@@ -10,14 +12,13 @@ export async function GET() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return unauthorized();
     }
 
     const sessions = await listChatSessions(supabase, user.id);
-    return NextResponse.json(sessions);
+    return apiSuccess(sessions);
   } catch (error) {
-    console.error('Failed to list chat sessions:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return handleApiRouteError(error, 'chat.sessions.list');
   }
 }
 
@@ -29,20 +30,22 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return unauthorized();
     }
 
-    const body = await req.json().catch(() => ({}));
-    const title = typeof body?.title === 'string' ? body.title : undefined;
-    const useLatest = body?.useLatest === true;
+    const body = ensureObject(await readJsonBody(req));
+    const title = readOptionalString(body.title, {
+      field: 'Title',
+      maxLength: 120,
+    });
+    const useLatest = readOptionalBoolean(body.useLatest, 'useLatest') ?? false;
 
     const session = useLatest
       ? await getOrCreateLatestChatSession(supabase, user.id)
       : await createChatSession(supabase, user.id, title);
 
-    return NextResponse.json(session, { status: 201 });
+    return apiSuccess(session, { status: 201 });
   } catch (error) {
-    console.error('Failed to create chat session:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return handleApiRouteError(error, 'chat.sessions.create');
   }
 }

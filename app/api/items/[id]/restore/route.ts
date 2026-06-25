@@ -1,4 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { ApiRouteError, apiSuccess, handleApiRouteError, unauthorized } from '@/lib/api/errors';
+import { readUuid } from '@/lib/api/validation';
 import { createClient } from '@/lib/supabase/server';
 import { mapKnowledgeItem, VAULT_BUCKET } from '@/lib/supabase/vault';
 import { getRestoredStatus } from '@/lib/vault/items';
@@ -11,21 +13,22 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return unauthorized();
     }
 
     const { id } = await params;
+    const itemId = readUuid(id, 'Item id');
 
     const { data: trashedItem, error } = await supabase
       .from('knowledge_items')
       .select('*')
-      .eq('id', id)
+      .eq('id', itemId)
       .eq('user_id', user.id)
       .not('deleted_at', 'is', null)
       .single();
 
     if (error || !trashedItem) {
-      return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+      throw new ApiRouteError(404, 'Item not found', { code: 'not_found' });
     }
 
     const { data: restoredItem, error: restoreError } = await supabase
@@ -37,13 +40,16 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
           summary: trashedItem.summary,
         }),
       })
-      .eq('id', id)
+      .eq('id', itemId)
       .eq('user_id', user.id)
       .select('*')
       .single();
 
     if (restoreError || !restoredItem) {
-      return NextResponse.json({ error: 'Failed to restore item' }, { status: 500 });
+      throw new ApiRouteError(500, 'Failed to restore item', {
+        code: 'restore_failed',
+        cause: restoreError,
+      });
     }
 
     let signedUrl: string | undefined;
@@ -52,9 +58,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       signedUrl = data?.signedUrl;
     }
 
-    return NextResponse.json(mapKnowledgeItem(restoredItem, signedUrl));
+    return apiSuccess(mapKnowledgeItem(restoredItem, signedUrl));
   } catch (error) {
-    console.error('Failed to restore item:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return handleApiRouteError(error, 'items.restore');
   }
 }

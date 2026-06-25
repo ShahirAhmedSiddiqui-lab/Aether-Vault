@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { ApiRouteError, apiSuccess, handleApiRouteError, unauthorized } from '@/lib/api/errors';
+import { ensureObject, readJsonBody, readRequiredString } from '@/lib/api/validation';
 import { createClient } from '@/lib/supabase/server';
 
 export async function POST(req: NextRequest) {
@@ -10,34 +12,36 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return unauthorized();
     }
 
-    const { currentPassword, password } = await req.json();
-    const normalizedCurrentPassword = String(currentPassword ?? '');
-    const normalizedPassword = String(password ?? '');
-
-    if (!normalizedCurrentPassword) {
-      return NextResponse.json({ error: 'Current password is required.' }, { status: 400 });
-    }
-
-    if (!normalizedPassword) {
-      return NextResponse.json({ error: 'Password is required.' }, { status: 400 });
-    }
-
-    if (normalizedPassword.length < 6) {
-      return NextResponse.json({ error: 'Password must be at least 6 characters long.' }, { status: 400 });
-    }
+    const body = ensureObject(await readJsonBody(req));
+    const normalizedCurrentPassword = readRequiredString(body.currentPassword, {
+      field: 'Current password',
+      minLength: 1,
+      maxLength: 1024,
+      trim: false,
+    });
+    const normalizedPassword = readRequiredString(body.password, {
+      field: 'Password',
+      minLength: 6,
+      maxLength: 1024,
+      trim: false,
+    });
 
     if (!user.email) {
-      return NextResponse.json({ error: 'This account does not have a password email identity.' }, { status: 400 });
+      throw new ApiRouteError(400, 'This account does not have a password email identity.', {
+        code: 'password_identity_missing',
+      });
     }
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
     if (!url || !publishableKey) {
-      return NextResponse.json({ error: 'Missing Supabase environment variables.' }, { status: 500 });
+      throw new ApiRouteError(500, 'Missing Supabase environment variables.', {
+        code: 'missing_environment',
+      });
     }
 
     // Verify the current password with an isolated client so we don't disturb the
@@ -55,7 +59,9 @@ export async function POST(req: NextRequest) {
     });
 
     if (signInError) {
-      return NextResponse.json({ error: 'Current password is incorrect.' }, { status: 400 });
+      throw new ApiRouteError(400, 'Current password is incorrect.', {
+        code: 'incorrect_current_password',
+      });
     }
 
     await verificationClient.auth.signOut();
@@ -65,15 +71,16 @@ export async function POST(req: NextRequest) {
     });
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      throw new ApiRouteError(400, error.message, {
+        code: 'password_update_failed',
+      });
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       success: true,
       message: 'Password updated successfully.',
     });
   } catch (error) {
-    console.error('Failed to update password:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return handleApiRouteError(error, 'auth.password_update');
   }
 }

@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ApiRouteError, apiSuccess, handleApiRouteError, unauthorized } from '@/lib/api/errors';
+import { logApiEvent } from '@/lib/api/logging';
+import { enforceRateLimit } from '@/lib/api/rate-limit';
+import { ensureObject, readJsonBody, readOptionalBoolean, readRequiredString } from '@/lib/api/validation';
 import { generateVaultChatAnswer } from '@/lib/ai/service';
 import { createClient } from '@/lib/supabase/server';
 import { mapChatMessage, mapKnowledgeItem } from '@/lib/supabase/vault';
@@ -12,7 +16,7 @@ export async function GET() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return unauthorized();
     }
 
     const session = await getOrCreateLatestChatSession(supabase, user.id);
@@ -27,10 +31,9 @@ export async function GET() {
       throw error;
     }
 
-    return NextResponse.json((data ?? []).map(mapChatMessage));
+    return apiSuccess((data ?? []).map(mapChatMessage));
   } catch (error) {
-    console.error('Failed to get chats:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return handleApiRouteError(error, 'chat.legacy.list');
   }
 }
 
@@ -42,14 +45,24 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return unauthorized();
     }
 
-    const { query, persist = true } = await req.json();
+    enforceRateLimit({
+      key: `chat:legacy:${user.id}`,
+      limit: 20,
+      windowMs: 60_000,
+      message: 'Too many chat requests. Please wait a minute and try again.',
+      code: 'chat_rate_limited',
+    });
 
-    if (typeof query !== 'string' || !query.trim()) {
-      return NextResponse.json({ error: 'Query is required' }, { status: 400 });
-    }
+    const body = ensureObject(await readJsonBody(req));
+    const query = readRequiredString(body.query, {
+      field: 'Query',
+      minLength: 1,
+      maxLength: 2_000,
+    });
+    const persist = readOptionalBoolean(body.persist, 'persist') ?? true;
 
     const session = await getOrCreateLatestChatSession(supabase, user.id);
 
@@ -84,7 +97,7 @@ export async function POST(req: NextRequest) {
     const aiResponse = await generateVaultChatAnswer(query, items, formattedHistory);
 
     if (!persist) {
-      return NextResponse.json(
+      return apiSuccess(
         {
           userMessage: {
             id: `preview-user-${Date.now()}`,
@@ -141,7 +154,7 @@ export async function POST(req: NextRequest) {
 
     const [userMessage, modelMessage] = insertedMessages.map(mapChatMessage);
 
-    return NextResponse.json(
+    return apiSuccess(
       {
         userMessage,
         modelMessage,
@@ -149,8 +162,10 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('Failed to send message:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    logApiEvent('error', 'chat.legacy.send.failed', {
+      cause: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return handleApiRouteError(error, 'chat.legacy.send');
   }
 }
 
@@ -162,7 +177,7 @@ export async function DELETE() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return unauthorized();
     }
 
     const { error } = await supabase.from('chat_sessions').delete().eq('user_id', user.id);
@@ -171,9 +186,8 @@ export async function DELETE() {
       throw error;
     }
 
-    return NextResponse.json({ success: true, message: 'Chat history cleared' });
+    return apiSuccess({ success: true, message: 'Chat history cleared' });
   } catch (error) {
-    console.error('Failed to clear chats:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return handleApiRouteError(error, 'chat.legacy.clear');
   }
 }
