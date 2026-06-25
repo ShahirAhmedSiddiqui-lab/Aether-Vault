@@ -4,6 +4,7 @@ import { LockKeyhole, UserRound } from 'lucide-react';
 import { login, signup } from './actions';
 import { BrandLockup } from '../_components/brand-lockup';
 import { createClient } from '@/lib/supabase/server';
+import { getSafeUser } from '@/lib/supabase/auth';
 
 export default async function LoginPage({
   searchParams,
@@ -11,9 +12,7 @@ export default async function LoginPage({
   searchParams: Promise<{ message?: string }>;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getSafeUser(supabase);
 
   if (user) {
     redirect('/vault');
@@ -70,12 +69,12 @@ export default async function LoginPage({
 
           <form className="space-y-4">
             <div className="space-y-2">
-              <label htmlFor="fullName" className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">
+              <label htmlFor="name" className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">
                 Full Name
               </label>
               <input
-                id="fullName"
-                name="fullName"
+                id="name"
+                name="name"
                 type="text"
                 placeholder="Memora User"
                 className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-900 outline-none transition focus:border-neutral-900 focus:bg-white"

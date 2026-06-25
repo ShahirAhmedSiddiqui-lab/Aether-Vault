@@ -3,12 +3,11 @@ import { AccountShell } from '@/app/account/_components/account-shell';
 import { ProfilePageClient } from './profile-page-client';
 import { createClient } from '@/lib/supabase/server';
 import { getProfileWithAvatarUrl } from '@/lib/supabase/profile';
+import { getSafeUser } from '@/lib/supabase/auth';
 
 export default async function ProfilePage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getSafeUser(supabase);
 
   if (!user) {
     redirect('/login?message=Please%20log%20in%20to%20manage%20your%20profile.');

@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { resolveBaseUrlFromRequest } from '@/lib/site-url';
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, password, fullName } = await req.json();
+    const { email, password, fullName, name } = await req.json();
 
     const normalizedEmail = String(email ?? '').trim();
     const normalizedPassword = String(password ?? '').trim();
-    const normalizedFullName = String(fullName ?? '').trim();
+    const normalizedName = String(fullName ?? name ?? '').trim();
 
     if (!normalizedEmail || !normalizedPassword) {
       return NextResponse.json({ error: 'Email and password are required.' }, { status: 400 });
@@ -18,12 +19,15 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = await createClient();
+    const baseUrl = resolveBaseUrlFromRequest(req);
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
       password: normalizedPassword,
       options: {
+        emailRedirectTo: new URL('/login', baseUrl).toString(),
         data: {
-          full_name: normalizedFullName || undefined,
+          full_name: normalizedName || undefined,
+          name: normalizedName || undefined,
         },
       },
     });

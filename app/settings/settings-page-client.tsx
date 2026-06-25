@@ -7,6 +7,7 @@ import { type UserPreferences, type UserProfile } from '@/lib/db';
 
 export function SettingsPageClient({ initialProfile }: { initialProfile: UserProfile }) {
   const [preferences, setPreferences] = React.useState<UserPreferences>(initialProfile.preferences);
+  const [currentPassword, setCurrentPassword] = React.useState('');
   const [newPassword, setNewPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
   const [isSavingPreferences, setIsSavingPreferences] = React.useState(false);
@@ -59,6 +60,11 @@ export function SettingsPageClient({ initialProfile }: { initialProfile: UserPro
     setPasswordFeedback(null);
     setError(null);
 
+    if (!currentPassword) {
+      setError('Enter your current password to continue.');
+      return;
+    }
+
     if (!newPassword || !confirmPassword) {
       setError('Enter your new password twice to continue.');
       return;
@@ -77,7 +83,7 @@ export function SettingsPageClient({ initialProfile }: { initialProfile: UserPro
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ password: newPassword }),
+        body: JSON.stringify({ currentPassword, password: newPassword }),
       });
       const data = await response.json();
 
@@ -85,6 +91,7 @@ export function SettingsPageClient({ initialProfile }: { initialProfile: UserPro
         throw new Error(data.error || 'Unable to update password.');
       }
 
+      setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setPasswordFeedback('Password updated successfully.');
@@ -233,6 +240,17 @@ export function SettingsPageClient({ initialProfile }: { initialProfile: UserPro
         </div>
 
         <div className="mt-8 grid gap-6 md:grid-cols-2">
+          <div className="space-y-2 md:col-span-2">
+            <label className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">Current password</label>
+            <input
+              type="password"
+              minLength={6}
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-900 outline-none transition focus:border-neutral-900 focus:bg-white"
+            />
+          </div>
+
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">New password</label>
             <input

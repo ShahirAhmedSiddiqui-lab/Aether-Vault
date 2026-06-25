@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { resolveBaseUrlFromRequest } from '@/lib/site-url';
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,7 +12,7 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = await createClient();
-    const redirectTo = new URL('/reset-password', req.url).toString();
+    const redirectTo = new URL('/reset-password', resolveBaseUrlFromRequest(req)).toString();
     const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
       redirectTo,
     });
