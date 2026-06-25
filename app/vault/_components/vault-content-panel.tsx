@@ -332,8 +332,12 @@ export function VaultContentPanel({
             <motion.div
               key={item.id}
               onClick={() => onSelectItem(item.id)}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+              whileHover={{ y: -3 }}
               className={cn(
-                'memora-soft-outline relative flex cursor-pointer flex-col justify-between rounded-xl border bg-white p-5 text-left transition group',
+                'memora-soft-outline relative flex cursor-pointer flex-col justify-between rounded-xl border bg-white p-5 text-left transition-premium group',
                 isSelected ? 'ring-1.5 ring-neutral-900 border-transparent shadow shadow-neutral-100' : 'border-neutral-200 hover:border-neutral-300 shadow-sm'
               )}
             >

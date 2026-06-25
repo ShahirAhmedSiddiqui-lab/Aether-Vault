@@ -1029,7 +1029,12 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
   ];
 
   return (
-    <div className="h-screen overflow-hidden bg-[#fafafc] text-neutral-800 font-sans relative antialiased flex flex-row">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.35, ease: 'easeOut' }}
+      className="h-screen overflow-hidden bg-[#fafafc] text-neutral-800 font-sans relative antialiased flex flex-row"
+    >
       <AnimatePresence>
         {notification && (
           <motion.div
@@ -1048,7 +1053,10 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
         <div className="fixed inset-0 bg-neutral-900/10 backdrop-blur-3xs z-30 md:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
 
-      <aside
+      <motion.aside
+        initial={{ opacity: 0, x: -14 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
         className={cn(
           'bg-white border-r border-[#e5e5eb] flex flex-col shrink-0 transition-all duration-300 z-40 h-full overflow-hidden',
           isSidebarOpen ? 'w-64 fixed inset-y-0 left-0 md:relative md:flex' : 'w-0 overflow-hidden border-r-0 !hidden'
@@ -1071,7 +1079,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
 
           <button
             onClick={() => setShowCaptureModal(true)}
-            className="w-full bg-neutral-900 hover:bg-neutral-800 active:scale-[0.98] text-white text-xs font-semibold py-2.5 px-3 rounded-lg shadow-sm transition flex items-center justify-center space-x-2"
+            className="w-full bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold py-2.5 px-3 rounded-lg shadow-sm transition-premium hover:-translate-y-0.5 flex items-center justify-center space-x-2"
           >
             <Plus className="w-4 h-4 text-white" />
             <span>Quick Capture</span>
@@ -1097,7 +1105,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                     key={cat.name}
                     onClick={() => setCurrentTab(cat.name as VaultTab)}
                     className={cn(
-                      'w-full px-3 py-2.5 rounded-xl flex items-center space-x-3 text-left transition',
+                      'w-full px-3 py-2.5 rounded-xl flex items-center space-x-3 text-left transition-premium',
                       isSelected ? 'bg-neutral-100 text-neutral-950 font-semibold' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
                     )}
                   >
@@ -1111,7 +1119,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
               <button
                 onClick={openChatTab}
                 className={cn(
-                  'w-full px-3 py-2.5 rounded-xl flex items-center space-x-3 text-left transition',
+                  'w-full px-3 py-2.5 rounded-xl flex items-center space-x-3 text-left transition-premium',
                   currentTab === 'Chat' ? 'bg-neutral-100 text-neutral-950 font-semibold' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
                 )}
               >
@@ -1164,10 +1172,15 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
             </div>
           </div>
         </div>
-      </aside>
+      </motion.aside>
 
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white border-b border-[#e5e5eb] h-14 shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 z-10 select-none">
+        <motion.header
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1], delay: 0.05 }}
+          className="bg-white border-b border-[#e5e5eb] h-14 shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 z-10 select-none"
+        >
           <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
             <button
               onClick={() => setIsSidebarOpen((prev) => !prev)}
@@ -1226,23 +1239,28 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                 openChatTab();
                 void handleChatSubmit(undefined, 'Synthesize a core summary breakdown of my saved knowledge assets.');
               }}
-              className="px-3.5 py-1.5 text-[10px] font-bold font-mono uppercase tracking-wider bg-neutral-950 hover:bg-neutral-800 text-white rounded-lg flex items-center transition shadow-xs active:scale-[0.98]"
+              className="px-3.5 py-1.5 text-[10px] font-bold font-mono uppercase tracking-wider bg-neutral-950 hover:bg-neutral-800 text-white rounded-lg flex items-center transition-premium shadow-xs"
             >
               <span>Auto-Synthesize</span>
             </button>
 
             <button
               onClick={handleLogout}
-              className="px-3 py-1.5 text-[10px] font-bold font-mono uppercase tracking-wider border border-neutral-200 hover:border-neutral-900 text-neutral-700 rounded-lg transition"
+              className="px-3 py-1.5 text-[10px] font-bold font-mono uppercase tracking-wider border border-neutral-200 hover:border-neutral-900 text-neutral-700 rounded-lg transition-premium"
             >
               Log Out
             </button>
           </div>
-        </header>
+        </motion.header>
 
         <div className="flex-1 flex overflow-hidden relative">
           {currentTab === 'Guide' && (
-            <div className="flex-1 overflow-y-auto p-10 max-w-4xl mx-auto text-left space-y-12 select-none">
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+              className="flex-1 overflow-y-auto p-10 max-w-4xl mx-auto text-left space-y-12 select-none"
+            >
               <div className="space-y-4">
                 <div className="inline-block bg-neutral-150 text-neutral-800 text-[10px] font-extrabold px-2 py-0.5 rounded font-mono border border-neutral-300">
                   PRODUCT TOUR
@@ -1280,11 +1298,16 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                   Enter Workspace
                 </button>
               </div>
-            </div>
+            </motion.div>
           )}
 
           {currentTab !== 'Chat' && currentTab !== 'Guide' && (
-            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden w-full">
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              className="flex-1 flex flex-col lg:flex-row overflow-hidden w-full"
+            >
               {!isDetailFullscreen && (
                 <VaultContentPanel
                   key={currentTab}
@@ -1347,11 +1370,16 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                   onToggleFullscreen={() => setIsDetailFullscreen((prev) => !prev)}
                 />
               )}
-            </div>
+            </motion.div>
           )}
 
           {currentTab === 'Chat' && (
-            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden select-none">
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              className="flex-1 flex flex-col lg:flex-row overflow-hidden select-none"
+            >
               <div className="flex-1 flex flex-col h-full overflow-hidden bg-neutral-50/50">
                 <div className="bg-white border-b border-neutral-200 py-3.5 px-6 flex justify-between items-center shrink-0">
                   <div className="flex items-center space-x-2">
@@ -1586,7 +1614,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                   <p className="text-[9px] text-neutral-400 font-mono leading-relaxed uppercase">Memora Studio Edition &bull; TLS SECURE</p>
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
         </div>
       </main>
@@ -1933,7 +1961,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
           </div>
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   );
 }
 

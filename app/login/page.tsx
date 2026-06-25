@@ -22,8 +22,8 @@ export default async function LoginPage({
   return (
     <main className="h-[100dvh] overflow-hidden bg-[radial-gradient(circle_at_top,_#f7f7f3,_#ffffff_55%)] text-neutral-950">
       <div className="mx-auto flex h-full max-w-6xl flex-col justify-center gap-8 overflow-hidden px-6 py-6 lg:flex-row lg:items-center lg:gap-16">
-        <section className="max-w-xl space-y-6 lg:flex-1">
-          <div className="inline-flex rounded-[26px] border border-neutral-200 bg-white/90 px-4 py-3 shadow-sm">
+        <section className="animate-memora-fade-up max-w-xl space-y-6 lg:flex-1">
+          <div className="inline-flex rounded-[26px] border border-neutral-200 bg-white/90 px-4 py-3 shadow-sm transition-premium hover:-translate-y-0.5">
             <BrandLockup size="sm" />
           </div>
           <div className="space-y-4">
@@ -36,14 +36,14 @@ export default async function LoginPage({
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+            <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm transition-premium hover:-translate-y-1 hover:shadow-md">
               <LockKeyhole className="mb-3 h-5 w-5 text-neutral-900" />
               <h2 className="text-sm font-bold text-neutral-950">Protected sessions</h2>
               <p className="mt-2 text-sm leading-6 text-neutral-600">
                 Only authenticated users can read, upload, or delete their vault data.
               </p>
             </div>
-            <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+            <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm transition-premium hover:-translate-y-1 hover:shadow-md">
               <UserRound className="mb-3 h-5 w-5 text-neutral-900" />
               <h2 className="text-sm font-bold text-neutral-950">Private file storage</h2>
               <p className="mt-2 text-sm leading-6 text-neutral-600">
@@ -54,7 +54,7 @@ export default async function LoginPage({
           </div>
         </section>
 
-        <section className="w-full max-w-md shrink-0 rounded-[28px] border border-neutral-200 bg-white p-7 shadow-[0_24px_80px_rgba(15,23,42,0.08)] lg:mt-0">
+        <section className="animate-memora-fade-up [animation-delay:120ms] w-full max-w-md shrink-0 rounded-[28px] border border-neutral-200 bg-white p-7 shadow-[0_24px_80px_rgba(15,23,42,0.08)] lg:mt-0">
           <div className="mb-6">
             <p className="text-xs font-bold uppercase tracking-[0.28em] text-neutral-400">Account Access</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-neutral-950">Login or create an account</h2>

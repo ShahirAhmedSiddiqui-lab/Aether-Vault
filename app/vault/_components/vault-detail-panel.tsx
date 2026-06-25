@@ -50,7 +50,10 @@ export function VaultDetailPanel({
   }
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, x: 18 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
       className={cn(
         'app-scrollbar bg-white shrink-0 border-t lg:border-t-0 border-neutral-200/85 p-6 flex flex-col overflow-y-auto',
         isFullscreen ? 'w-full flex-1' : 'w-full lg:w-96'
@@ -423,10 +426,11 @@ export function VaultDetailPanel({
                 const isFlipped = flippedCardId === fc.id;
 
                 return (
-                  <div
+                  <motion.div
                     key={fc.id}
                     onClick={() => onFlipCard(isFlipped ? null : fc.id)}
-                    className="bg-neutral-50 border border-neutral-200/80 hover:bg-[#fafafc] rounded-xl p-3.5 cursor-pointer transition text-left min-h-[90px] flex flex-col justify-between"
+                    whileHover={{ y: -2 }}
+                    className="bg-neutral-50 border border-neutral-200/80 hover:bg-[#fafafc] rounded-xl p-3.5 cursor-pointer transition-premium text-left min-h-[90px] flex flex-col justify-between"
                   >
                     <div className="flex justify-between items-center text-[9px] font-bold tracking-wider font-mono text-neutral-400 uppercase mb-2">
                       <span className="text-neutral-600 bg-neutral-200/60 px-1.5 py-0.5 rounded">{fc.type}</span>
@@ -440,7 +444,7 @@ export function VaultDetailPanel({
                     ) : (
                       <p className="text-neutral-800 text-xs font-semibold leading-relaxed">{fc.question}</p>
                     )}
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
@@ -487,7 +491,7 @@ export function VaultDetailPanel({
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
