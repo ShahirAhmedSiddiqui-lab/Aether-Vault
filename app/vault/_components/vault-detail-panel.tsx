@@ -52,7 +52,7 @@ export function VaultDetailPanel({
   return (
     <div
       className={cn(
-        'bg-white shrink-0 border-t lg:border-t-0 border-neutral-200/85 p-6 flex flex-col overflow-y-auto',
+        'app-scrollbar bg-white shrink-0 border-t lg:border-t-0 border-neutral-200/85 p-6 flex flex-col overflow-y-auto',
         isFullscreen ? 'w-full flex-1' : 'w-full lg:w-96'
       )}
     >

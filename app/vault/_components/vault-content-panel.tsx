@@ -157,7 +157,7 @@ export function VaultContentPanel({
   }, [items]);
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-6 py-6 border-r border-neutral-200/80 bg-[#fafafc]">
+    <div className="app-scrollbar flex-1 flex flex-col overflow-y-auto border-r border-neutral-200/80 bg-[#fafafc] px-6 py-6">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-base font-bold tracking-tight text-neutral-900">
@@ -333,7 +333,7 @@ export function VaultContentPanel({
               key={item.id}
               onClick={() => onSelectItem(item.id)}
               className={cn(
-                'bg-white border rounded-xl p-5 text-left cursor-pointer transition relative flex flex-col justify-between group',
+                'memora-soft-outline relative flex cursor-pointer flex-col justify-between rounded-xl border bg-white p-5 text-left transition group',
                 isSelected ? 'ring-1.5 ring-neutral-900 border-transparent shadow shadow-neutral-100' : 'border-neutral-200 hover:border-neutral-300 shadow-sm'
               )}
             >

@@ -21,7 +21,7 @@ export function PasswordInput({
         {...props}
         type={isVisible ? 'text' : 'password'}
         className={cn(
-          'w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 pr-12 text-sm text-neutral-900 outline-none transition focus:border-neutral-900 focus:bg-white',
+          'w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 pr-12 text-sm text-neutral-900 outline-none transition focus:border-neutral-900 focus:bg-white memora-soft-outline',
           className
         )}
       />

@@ -23,10 +23,26 @@ export function ResetPasswordClient() {
 
     const bootstrap = async () => {
       const hash = window.location.hash.toLowerCase();
+      const hashParams = new URLSearchParams(window.location.hash.slice(1));
       const search = new URLSearchParams(window.location.search);
       const tokenHash = search.get('token_hash');
       const type = search.get('type');
       const code = search.get('code');
+      const hashType = hashParams.get('type');
+      const hasRecoveryHashSession = hashType === 'recovery' && !!hashParams.get('access_token');
+
+      const {
+        data: { session: existingSession },
+      } = await supabase.auth.getSession();
+
+      if (existingSession || hasRecoveryHashSession) {
+        setError(null);
+        setMode('update');
+        if (window.location.search || window.location.hash) {
+          window.history.replaceState({}, document.title, '/reset-password');
+        }
+        return;
+      }
 
       if (tokenHash && type) {
         const { error: verifyError } = await supabase.auth.verifyOtp({
@@ -35,11 +51,19 @@ export function ResetPasswordClient() {
         });
 
         if (verifyError) {
-          setError('This reset link is invalid or has expired. Request a fresh one and try again.');
-          return;
+          const {
+            data: { session: fallbackSession },
+          } = await supabase.auth.getSession();
+
+          if (!fallbackSession) {
+            setError('This reset link is invalid or has expired. Request a fresh one and try again.');
+            return;
+          }
         }
 
+        setError(null);
         setMode('update');
+        window.history.replaceState({}, document.title, '/reset-password');
         return;
       }
 
@@ -51,18 +75,16 @@ export function ResetPasswordClient() {
           return;
         }
 
+        setError(null);
         setMode('update');
+        window.history.replaceState({}, document.title, '/reset-password');
         return;
       }
 
       if (hash.includes('type=recovery')) {
+        setError(null);
         setMode('update');
         return;
-      }
-
-      const { data } = await supabase.auth.getSession();
-      if (data.session) {
-        setMode('update');
       }
     };
 
@@ -72,6 +94,7 @@ export function ResetPasswordClient() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+        setError(null);
         setMode('update');
       }
     });

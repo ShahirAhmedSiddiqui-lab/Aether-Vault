@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { RefreshCcw } from 'lucide-react';
 import { PasswordInput } from '@/app/_components/password-input';
@@ -281,16 +280,6 @@ export function LoginFormClient({ initialMessage }: LoginFormClientProps) {
             {isSigningUp ? 'Creating account...' : 'Sign Up'}
           </button>
         </div>
-
-        {!email.trim() ? (
-          <p className="text-xs leading-6 text-neutral-500">
-            No email entered yet.
-            {' '}
-            <Link href="/reset-password" className="font-semibold text-neutral-700 transition hover:text-neutral-950">
-              Open the reset page instead.
-            </Link>
-          </p>
-        ) : null}
       </form>
     </div>
   );

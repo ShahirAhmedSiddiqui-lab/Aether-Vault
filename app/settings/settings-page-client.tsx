@@ -95,7 +95,7 @@ export function SettingsPageClient({ initialProfile }: { initialProfile: UserPro
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setPasswordFeedback('Password updated successfully.');
+      setPasswordFeedback(data.message || 'Password updated successfully.');
     } catch (updateError) {
       console.error(updateError);
       setError(updateError instanceof Error ? updateError.message : 'Unable to update password.');
@@ -123,7 +123,7 @@ export function SettingsPageClient({ initialProfile }: { initialProfile: UserPro
         throw new Error(data.error || 'Unable to send reset email.');
       }
 
-      setSecurityFeedback(data.message || 'Password reset email sent.');
+      setSecurityFeedback('Password reset email sent. Open the latest message to choose a new password.');
     } catch (sendError) {
       console.error(sendError);
       setError(sendError instanceof Error ? sendError.message : 'Unable to send reset email.');

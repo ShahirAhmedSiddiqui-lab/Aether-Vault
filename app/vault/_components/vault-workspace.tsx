@@ -1054,7 +1054,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
           isSidebarOpen ? 'w-64 fixed inset-y-0 left-0 md:relative md:flex' : 'w-0 overflow-hidden border-r-0 !hidden'
         )}
       >
-        <div className="flex-1 overflow-y-auto py-6 px-4 space-y-6">
+        <div className="app-scrollbar flex-1 overflow-y-auto py-6 px-4 space-y-6">
           <div
             onClick={() => window.location.assign('/')}
             className="px-2.5 cursor-pointer group select-none"
@@ -1079,7 +1079,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
 
             <div className="space-y-1">
               <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 px-3 py-1 selection:bg-transparent">Vault Contents</div>
-            <nav className="space-y-0.5">
+            <nav className="app-slider-scrollbar space-y-1 rounded-2xl border border-neutral-200/80 bg-neutral-50/80 p-2 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)]">
               {categories.map((cat) => {
                 const Icon = cat.icon;
                 const isSelected = currentTab === cat.name;
@@ -1125,7 +1125,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
           </div>
         </div>
 
-        <div className="mt-auto p-4 border-t border-[#e5e5eb] space-y-3 bg-white">
+        <div className="mt-auto space-y-3 border-t border-[#e5e5eb] bg-white p-4">
           <button
             onClick={() => setCurrentTab('Guide')}
             className={cn(
@@ -1151,7 +1151,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
             </Link>
           </div>
 
-          <div className="flex items-center space-x-3 px-2 py-1.5 text-left border border-neutral-200/55 rounded-xl bg-neutral-50/50 min-w-0">
+          <div className="memora-soft-outline flex min-w-0 items-center space-x-3 rounded-xl border border-neutral-200/55 bg-neutral-50/50 px-2 py-1.5 text-left">
             <div
               className="w-9 h-9 rounded-full bg-neutral-900 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-sm"
               style={identity?.avatarUrl ? { backgroundImage: `url(${identity.avatarUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
@@ -1206,7 +1206,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                 placeholder="Search concepts, source tags..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 pl-10 pr-14 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:bg-white transition"
+                className="memora-soft-outline w-full rounded-xl border border-neutral-200 bg-neutral-50 py-2 pl-10 pr-14 text-xs text-neutral-900 placeholder-neutral-400 transition focus:border-neutral-900 focus:bg-white focus:outline-none"
               />
               {searchQuery && (
                 <button onClick={() => setSearchQuery('')} className="absolute right-2.5 text-[10px] text-neutral-400 hover:text-neutral-900">
