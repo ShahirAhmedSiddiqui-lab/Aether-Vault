@@ -320,38 +320,38 @@ export function VaultContentPanel({
             <motion.div
               initial={reduceMotion ? false : { opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-[#2a2c30] text-neutral-200 outline outline-1 outline-neutral-800 p-5 rounded-xl text-left relative mt-1 mb-6 shadow-xl"
+              className="relative mt-1 mb-6 rounded-xl border border-neutral-200 bg-white p-5 text-left shadow-sm"
             >
-              <button onClick={onClearLocalAskAnswer} className="absolute top-3.5 right-3.5 p-1 text-neutral-400 hover:text-white transition">
+              <button onClick={onClearLocalAskAnswer} className="absolute top-3.5 right-3.5 p-1 text-neutral-400 transition hover:text-neutral-700">
                 <X className="w-4 h-4" />
               </button>
-              <h5 className="text-[9px] font-bold uppercase tracking-wider text-amber-400 font-mono mb-2">
+              <h5 className="mb-2 font-mono text-[9px] font-bold uppercase tracking-wider text-neutral-500">
                 Local brain compilation results:
               </h5>
-              <div className="text-xs leading-relaxed text-neutral-300 font-normal">
+              <div className="text-xs font-normal leading-relaxed text-neutral-700">
                 <FormattedMarkdown text={localAskResult.answer} />
               </div>
               {localAskResult.summaryBlock && (
-                <div className="mt-4 rounded-xl border border-neutral-700 bg-neutral-900/40 p-4">
-                  <div className="mb-2 text-[9px] font-bold uppercase tracking-wider text-neutral-400 font-mono">Detailed synthesis</div>
-                  <div className="text-xs leading-relaxed text-neutral-300">
+                <div className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                  <div className="mb-2 font-mono text-[9px] font-bold uppercase tracking-wider text-neutral-500">Detailed synthesis</div>
+                  <div className="text-xs leading-relaxed text-neutral-700">
                     <FormattedMarkdown text={localAskResult.summaryBlock} />
                   </div>
                 </div>
               )}
               {localAskResult.referencedSources && localAskResult.referencedSources.length > 0 && (
                 <div className="mt-4 space-y-2">
-                  <div className="text-[9px] font-bold uppercase tracking-wider text-neutral-400 font-mono">Attached references</div>
+                  <div className="font-mono text-[9px] font-bold uppercase tracking-wider text-neutral-500">Attached references</div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {localAskResult.referencedSources.map((source, index) => (
                       <button
                         key={`${source.itemId ?? source.title}-${index}`}
                         type="button"
                         onClick={() => onOpenReferencedItem(source)}
-                        className="rounded-xl border border-neutral-700 bg-neutral-900/50 p-3 text-left transition hover:border-neutral-500"
+                        className="rounded-xl border border-neutral-200 bg-white p-3 text-left transition hover:border-neutral-300 hover:bg-neutral-50"
                       >
-                        <div className="text-[9px] font-bold uppercase tracking-wider text-amber-300 font-mono">{source.source}</div>
-                        <div className="mt-1 text-[11px] font-semibold leading-snug text-neutral-100">{source.title}</div>
+                        <div className="font-mono text-[9px] font-bold uppercase tracking-wider text-neutral-500">{source.source}</div>
+                        <div className="mt-1 text-[11px] font-semibold leading-snug text-neutral-800">{source.title}</div>
                       </button>
                     ))}
                   </div>
@@ -360,7 +360,7 @@ export function VaultContentPanel({
               {localAskResult.tags && localAskResult.tags.length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2">
                   {localAskResult.tags.map((tag) => (
-                    <span key={tag} className="rounded-full bg-neutral-800 px-2 py-1 text-[9px] font-mono text-neutral-300">
+                    <span key={tag} className="rounded-full bg-neutral-100 px-2 py-1 text-[9px] font-mono text-neutral-600">
                       #{tag}
                     </span>
                   ))}

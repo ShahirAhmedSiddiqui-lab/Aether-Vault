@@ -317,14 +317,6 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
     };
   }, [closeConfirmDialog, confirmDialog]);
 
-  const getPreferredTabForItem = React.useCallback((item: KnowledgeItem): VaultTab => {
-    if (item.deletedAt) {
-      return 'Trash';
-    }
-
-    return item.type;
-  }, []);
-
   const openReferencedItem = React.useCallback(
     (source: ChatReferencedSource, options?: { toast?: boolean }) => {
       const found = source.itemId
@@ -338,14 +330,13 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
 
       setSelectedItemId(found.id);
       setIsDetailPanelOpen(true);
-      setIsDetailFullscreen(false);
-      setCurrentTab(getPreferredTabForItem(found));
+      setIsDetailFullscreen(true);
 
       if (options?.toast !== false) {
         showToast(`Opened referenced card: ${found.title}`);
       }
     },
-    [getPreferredTabForItem, items, showToast]
+    [items, showToast]
   );
 
   const upsertItem = React.useCallback((nextItem: KnowledgeItem) => {
@@ -781,7 +772,10 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
 
       const newItem = await response.json();
       upsertItem(newItem);
+      setCurrentTab('Overview');
       setSelectedItemId(newItem.id);
+      setIsDetailPanelOpen(true);
+      setIsDetailFullscreen(false);
       setShowCaptureModal(false);
       resetCaptureState();
       if (newItem.processingStatus === 'failed') {
@@ -821,7 +815,10 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
 
       const newItem = await response.json();
       upsertItem(newItem);
+      setCurrentTab('Overview');
       setSelectedItemId(newItem.id);
+      setIsDetailPanelOpen(true);
+      setIsDetailFullscreen(false);
       setInlineInput('');
       if (newItem.processingStatus === 'failed') {
         showToast(`Added "${newItem.title}", but the upload could not be prepared for AI processing.`);
@@ -1531,7 +1528,7 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
                 />
               )}
 
-              {isDetailPanelOpen && (
+              {isDetailPanelOpen && !isDetailFullscreen && (
                 <VaultDetailPanel
                   key={currentItem?.id ?? 'detail-panel'}
                   currentItem={currentItem}
@@ -1634,7 +1631,7 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
                           <motion.div
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="w-full p-5 bg-white border border-neutral-200 shadow-sm rounded-xl text-left border-l-4 border-l-neutral-900"
+                            className="w-full rounded-xl border border-neutral-200 bg-white p-5 text-left shadow-sm"
                           >
                             <h5 className="text-[10px] font-bold font-mono uppercase tracking-widest text-neutral-450 mb-2">
                               Synthesized Information block:
@@ -1807,6 +1804,51 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
       </main>
 
       <AnimatePresence>
+        {isDetailPanelOpen && isDetailFullscreen && currentItem && (
+          <div className="fixed inset-0 z-50 flex items-stretch justify-center">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setIsDetailPanelOpen(false);
+                setIsDetailFullscreen(false);
+              }}
+              className="absolute inset-0 bg-white/85 backdrop-blur-[2px]"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.985, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.985, y: 10 }}
+              className="relative z-10 flex h-full w-full max-w-6xl overflow-hidden border-l border-r border-neutral-200 bg-white shadow-2xl"
+            >
+              <VaultDetailPanel
+                key={`overlay-${currentItem.id}`}
+                currentItem={currentItem}
+                isTrashView={currentTab === 'Trash'}
+                isFullscreen
+                reduceMotion={reduceMotion}
+                flippedCardId={flippedCardId}
+                voiceSpeed={voiceSpeed}
+                audioRef={audioRef}
+                onSetVoiceSpeed={setVoiceSpeed}
+                onFlipCard={setFlippedCardId}
+                onToggleBookmark={handleToggleBookmark}
+                onDeleteItem={handleDeleteItem}
+                onRestoreItem={handleRestoreItem}
+                onPermanentDeleteItem={handlePermanentDeleteItem}
+                onRetryItem={handleRetryItem}
+                onClose={() => {
+                  setIsDetailPanelOpen(false);
+                  setIsDetailFullscreen(false);
+                }}
+                onToggleFullscreen={() => setIsDetailFullscreen((prev) => !prev)}
+              />
+            </motion.div>
+          </div>
+        )}
+
         {showCaptureModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div
