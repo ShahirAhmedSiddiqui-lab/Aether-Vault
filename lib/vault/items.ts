@@ -11,6 +11,9 @@ export type ItemPreviewMetadata = {
   faviconUrl?: string;
   provider?: string;
   sourceUrl?: string;
+  title?: string;
+  description?: string;
+  authorName?: string;
   fileName?: string;
   mimeType?: string;
   byteSize?: number;
@@ -127,11 +130,19 @@ export function buildPreviewMetadata({
   fileData,
   thumbnailUrl,
   faviconUrl,
+  title,
+  description,
+  authorName,
+  provider,
 }: {
   url?: string;
   fileData?: UploadedFileData;
   thumbnailUrl?: string | null;
   faviconUrl?: string | null;
+  title?: string | null;
+  description?: string | null;
+  authorName?: string | null;
+  provider?: string | null;
 }): ItemPreviewMetadata {
   const metadata: ItemPreviewMetadata = {};
 
@@ -145,6 +156,18 @@ export function buildPreviewMetadata({
 
   if (url) {
     metadata.sourceUrl = url;
+  }
+
+  if (title) {
+    metadata.title = title;
+  }
+
+  if (description) {
+    metadata.description = description;
+  }
+
+  if (authorName) {
+    metadata.authorName = authorName;
   }
 
   if (fileData?.name) {
@@ -161,7 +184,9 @@ export function buildPreviewMetadata({
 
   metadata.captureKind = inferCaptureKind({ fileData, url });
 
-  if (url && isYouTubeUrl(url)) {
+  if (provider) {
+    metadata.provider = provider;
+  } else if (url && isYouTubeUrl(url)) {
     metadata.provider = 'youtube';
   }
 
@@ -214,6 +239,7 @@ export function getFileExtension(fileName: string | undefined, mimeType: string 
     'audio/x-wav': 'wav',
     'audio/mp4': 'm4a',
     'audio/m4a': 'm4a',
+    'audio/ogg': 'ogg',
     'image/jpeg': 'jpg',
     'image/jpg': 'jpg',
     'image/png': 'png',

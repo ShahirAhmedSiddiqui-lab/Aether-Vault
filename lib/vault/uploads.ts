@@ -19,25 +19,31 @@ export const ALLOWED_VAULT_UPLOAD_MIME_TYPES = new Set([
   'audio/ogg',
 ]);
 
+export function normalizeVaultMimeType(mimeType: string | undefined) {
+  return (mimeType ?? '').split(';')[0].trim().toLowerCase();
+}
+
 export function validateVaultUpload(fileData: UploadedFileData | undefined) {
   if (!fileData) {
     return;
   }
 
-  if (!fileData.base64 || !fileData.mimeType) {
+  const normalizedMimeType = normalizeVaultMimeType(fileData.mimeType);
+
+  if (!fileData.base64 || !normalizedMimeType) {
     throw new ApiRouteError(400, 'File upload payload is invalid.', {
       code: 'invalid_upload',
     });
   }
 
-  if (!ALLOWED_VAULT_UPLOAD_MIME_TYPES.has(fileData.mimeType)) {
+  if (!ALLOWED_VAULT_UPLOAD_MIME_TYPES.has(normalizedMimeType)) {
     throw new ApiRouteError(
       400,
       'Uploads must be a PDF, image, or supported audio file.',
       {
         code: 'invalid_upload_type',
         details: {
-          mimeType: fileData.mimeType,
+          mimeType: normalizedMimeType,
         },
       }
     );
@@ -77,7 +83,7 @@ export function coerceUploadedFileData(value: unknown) {
 
   return {
     base64: typeof data.base64 === 'string' ? data.base64 : '',
-    mimeType: typeof data.mimeType === 'string' ? data.mimeType : '',
+    mimeType: normalizeVaultMimeType(typeof data.mimeType === 'string' ? data.mimeType : ''),
     name: typeof data.name === 'string' ? data.name : undefined,
     size: typeof data.size === 'number' ? data.size : undefined,
   } satisfies UploadedFileData;

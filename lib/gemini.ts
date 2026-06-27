@@ -73,7 +73,8 @@ export async function summarizeAndExtract(
   flashcards: Omit<Flashcard, 'id'>[];
 }> {
   const ai = getAiClient();
-  const urlContext = sourceUrl ? await fetchUrlContext(sourceUrl) : '';
+  const youtubeMetadata = sourceUrl ? await fetchYouTubeMetadata(sourceUrl) : null;
+  const urlContext = sourceUrl ? await fetchUrlContext(sourceUrl, youtubeMetadata) : '';
   const normalizedContent = normalizeSourceText(content);
   const fileContext = fileData
     ? `Uploaded file metadata:
@@ -191,14 +192,14 @@ ${fileContext}`;
       data.type = customType;
     }
     return {
-      title: data.title?.trim() || 'New Raw Save',
+      title: data.title?.trim() || youtubeMetadata?.title || 'New Raw Save',
       summary: data.summary?.trim() || buildFallbackSummary(content, sourceUrl, customType).summary,
       keyPoints: normalizeKeyPoints(data.keyPoints),
       type: data.type || customType || 'Articles',
       tags: normalizeTags(data.tags),
       readTime: data.readTime?.trim() || '3 min read',
-      source: data.source?.trim() || deriveSourceLabel(sourceUrl, fileData),
-      author: data.author?.trim() || undefined,
+      source: data.source?.trim() || youtubeMetadata?.providerName || deriveSourceLabel(sourceUrl, fileData),
+      author: data.author?.trim() || youtubeMetadata?.authorName || undefined,
       flashcards: normalizeFlashcards(data.flashcards, data.title?.trim() || 'New Raw Save', normalizedContent),
     };
   } catch (error) {
@@ -612,10 +613,16 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchUrlContext(url: string) {
+type YouTubeMetadata = {
+  title?: string;
+  authorName?: string;
+  providerName?: string;
+};
+
+async function fetchUrlContext(url: string, youtubeMetadata?: YouTubeMetadata | null) {
   try {
     if (isYouTubeUrl(url)) {
-      const youtubeContext = await fetchYouTubeContext(url);
+      const youtubeContext = buildYouTubeContext(url, youtubeMetadata ?? await fetchYouTubeMetadata(url));
       if (youtubeContext) {
         return youtubeContext;
       }
@@ -633,7 +640,7 @@ async function fetchUrlContext(url: string) {
     clearTimeout(timeout);
 
     if (!response.ok) {
-      return '';
+      return null;
     }
 
     const contentType = response.headers.get('content-type') || '';
@@ -654,7 +661,7 @@ async function fetchUrlContext(url: string) {
   }
 }
 
-async function fetchYouTubeContext(url: string) {
+async function fetchYouTubeMetadata(url: string): Promise<YouTubeMetadata | null> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
@@ -669,7 +676,7 @@ async function fetchYouTubeContext(url: string) {
     clearTimeout(timeout);
 
     if (!response.ok) {
-      return '';
+      return null;
     }
 
     const data = (await response.json()) as {
@@ -678,17 +685,29 @@ async function fetchYouTubeContext(url: string) {
       provider_name?: string;
     };
 
-    return [
-      data.title ? `Video title: ${normalizeSourceText(data.title)}` : '',
-      data.author_name ? `Channel: ${normalizeSourceText(data.author_name)}` : '',
-      data.provider_name ? `Platform: ${normalizeSourceText(data.provider_name)}` : '',
-      `Original video URL: ${url}`,
-    ]
-      .filter(Boolean)
-      .join('\n');
+    return {
+      title: data.title ? normalizeSourceText(data.title) : undefined,
+      authorName: data.author_name ? normalizeSourceText(data.author_name) : undefined,
+      providerName: data.provider_name ? normalizeSourceText(data.provider_name) : undefined,
+    };
   } catch {
+    return null;
+  }
+}
+
+function buildYouTubeContext(url: string, metadata?: YouTubeMetadata | null) {
+  if (!metadata) {
     return '';
   }
+
+  return [
+    metadata.title ? `Video title: ${metadata.title}` : '',
+    metadata.authorName ? `Channel: ${metadata.authorName}` : '',
+    metadata.providerName ? `Platform: ${metadata.providerName}` : '',
+    `Original video URL: ${url}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 function isYouTubeUrl(url: string) {

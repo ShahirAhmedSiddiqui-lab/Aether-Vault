@@ -135,6 +135,19 @@ function getSupportedAudioMimeType() {
   return supportedTypes.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) ?? '';
 }
 
+function getRecordedAudioFileName(mimeType: string | undefined) {
+  const normalizedMimeType = (mimeType ?? '').split(';')[0].trim().toLowerCase();
+  const extensionMap: Record<string, string> = {
+    'audio/webm': 'webm',
+    'audio/mp4': 'm4a',
+    'audio/mpeg': 'mp3',
+    'audio/ogg': 'ogg',
+    'audio/wav': 'wav',
+  };
+  const extension = extensionMap[normalizedMimeType] ?? 'webm';
+  return `Voice Recorded Memo - ${new Date().toLocaleDateString()}.${extension}`;
+}
+
 function getResponseStylePrompt(style: UserPreferences['brainResponseStyle']) {
   switch (style) {
     case 'concise':
@@ -747,15 +760,16 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
     try {
       const payload: any = {
         url: captureUrl || undefined,
-        content: captureContent || (uploadFile ? `Uploaded File: ${uploadFile.name}` : undefined),
+        content: captureContent || undefined,
         type: captureType,
       };
 
       if (uploadFileBase64) {
+        const recordedMimeType = (recorderBlob?.type || 'audio/webm').split(';')[0].trim().toLowerCase();
         payload.fileData = {
           base64: uploadFileBase64,
-          mimeType: uploadFile ? uploadFile.type : (recorderBlob ? recorderBlob.type : 'audio/webm'),
-          name: uploadFile ? uploadFile.name : `Voice Recorded Memo - ${new Date().toLocaleDateString()}`,
+          mimeType: uploadFile ? uploadFile.type : recordedMimeType,
+          name: uploadFile ? uploadFile.name : getRecordedAudioFileName(recordedMimeType),
           size: uploadFile ? uploadFile.size : (recorderBlob ? recorderBlob.size : 12000),
         };
       }

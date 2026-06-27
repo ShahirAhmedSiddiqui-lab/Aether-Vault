@@ -1,17 +1,151 @@
 'use client';
 
-import { motion } from 'motion/react';
+import * as React from 'react';
+import { motion, useMotionTemplate, useMotionValue, useSpring } from 'motion/react';
 import { ArrowRight, Bot, Layers, Sparkles } from 'lucide-react';
 import { BrandLockup } from './brand-lockup';
 
 export function MarketingLanding() {
+  const rotatingLines = React.useMemo(
+    () => [
+      'Recall the exact idea before it disappears.',
+      'Turn scattered links into a searchable memory.',
+      'Ask your saved knowledge like it already knows you.',
+    ],
+    []
+  );
+  const [typedLineIndex, setTypedLineIndex] = React.useState(0);
+  const [typedText, setTypedText] = React.useState('');
+  const [isDeleting, setIsDeleting] = React.useState(false);
+  const pointerX = useMotionValue(0.5);
+  const pointerY = useMotionValue(0.35);
+  const rawRotateX = useMotionValue(0);
+  const rawRotateY = useMotionValue(0);
+  const rawShiftX = useMotionValue(0);
+  const rawShiftY = useMotionValue(0);
+  const rotateX = useSpring(rawRotateX, { stiffness: 90, damping: 22, mass: 0.7 });
+  const rotateY = useSpring(rawRotateY, { stiffness: 90, damping: 22, mass: 0.7 });
+  const shiftX = useSpring(rawShiftX, { stiffness: 80, damping: 24, mass: 0.9 });
+  const shiftY = useSpring(rawShiftY, { stiffness: 80, damping: 24, mass: 0.9 });
+  const shaderGlow = useMotionTemplate`radial-gradient(circle at ${pointerX}00% ${pointerY}00%, rgba(0,0,0,0.12), rgba(0,0,0,0.04) 18%, rgba(255,255,255,0.92) 44%, rgba(255,255,255,0) 70%)`;
+  const shaderMesh = useMotionTemplate`radial-gradient(circle at ${pointerX}00% ${pointerY}00%, rgba(255,255,255,0.86), rgba(255,255,255,0) 34%), linear-gradient(180deg, rgba(255,255,255,0.94) 0%, rgba(246,246,247,0.98) 100%)`;
+
+  React.useEffect(() => {
+    const currentLine = rotatingLines[typedLineIndex] ?? '';
+    const isLineComplete = typedText === currentLine;
+    const isLineCleared = typedText.length === 0;
+
+    const timeout = window.setTimeout(
+      () => {
+        if (!isDeleting && !isLineComplete) {
+          setTypedText(currentLine.slice(0, typedText.length + 1));
+          return;
+        }
+
+        if (!isDeleting && isLineComplete) {
+          setIsDeleting(true);
+          return;
+        }
+
+        if (isDeleting && !isLineCleared) {
+          setTypedText((prev) => prev.slice(0, -1));
+          return;
+        }
+
+        setIsDeleting(false);
+        setTypedLineIndex((prev) => (prev + 1) % rotatingLines.length);
+      },
+      !isDeleting && isLineComplete ? 1500 : isDeleting ? 28 : 48
+    );
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [isDeleting, rotatingLines, typedLineIndex, typedText]);
+
+  const handlePointerMove = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const nextX = (event.clientX - bounds.left) / bounds.width;
+    const nextY = (event.clientY - bounds.top) / bounds.height;
+    const clampedX = Math.max(0, Math.min(1, nextX));
+    const clampedY = Math.max(0, Math.min(1, nextY));
+
+    pointerX.set(clampedX);
+    pointerY.set(clampedY);
+    rawRotateX.set((0.5 - clampedY) * 8);
+    rawRotateY.set((clampedX - 0.5) * 10);
+    rawShiftX.set((clampedX - 0.5) * 26);
+    rawShiftY.set((clampedY - 0.5) * 18);
+  }, [pointerX, pointerY, rawRotateX, rawRotateY, rawShiftX, rawShiftY]);
+
+  const handlePointerLeave = React.useCallback(() => {
+    pointerX.set(0.5);
+    pointerY.set(0.35);
+    rawRotateX.set(0);
+    rawRotateY.set(0);
+    rawShiftX.set(0);
+    rawShiftY.set(0);
+  }, [pointerX, pointerY, rawRotateX, rawRotateY, rawShiftX, rawShiftY]);
+
   return (
-    <div className="min-h-screen bg-white text-neutral-900 font-sans relative antialiased flex flex-col justify-between overflow-x-hidden">
+    <div
+      className="relative flex min-h-screen flex-col justify-between overflow-x-hidden bg-white font-sans text-neutral-900 antialiased"
+      onPointerMove={handlePointerMove}
+      onPointerLeave={handlePointerLeave}
+    >
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 overflow-hidden"
+      >
+        <motion.div className="absolute inset-0" style={{ background: shaderMesh }} />
+        <motion.div className="absolute inset-0 opacity-90 mix-blend-screen" style={{ background: shaderGlow }} />
+        <motion.div
+          className="absolute left-1/2 top-1/2 h-[140vh] w-[140vw] -translate-x-1/2 -translate-y-1/2 [transform-style:preserve-3d]"
+          style={{
+            x: shiftX,
+            y: shiftY,
+            rotateX,
+            rotateY,
+          }}
+        >
+          <svg
+            className="h-full w-full opacity-[0.18]"
+            viewBox="0 0 1600 1200"
+            fill="none"
+          >
+            <defs>
+              <linearGradient id="hexStroke" x1="0" y1="0" x2="1600" y2="1200" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#000000" />
+                <stop offset="0.5" stopColor="#6b6b6b" />
+                <stop offset="1" stopColor="#ffffff" />
+              </linearGradient>
+              <radialGradient id="hexFocus" cx="50%" cy="35%" r="55%">
+                <stop stopColor="#000000" stopOpacity="0.22" />
+                <stop offset="0.45" stopColor="#7a7a7a" stopOpacity="0.12" />
+                <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
+              </radialGradient>
+            </defs>
+            <path
+              d="M210 196L314 136L418 196V316L314 376L210 316V196ZM418 196L522 136L626 196V316L522 376L418 316V196ZM626 196L730 136L834 196V316L730 376L626 316V196ZM834 196L938 136L1042 196V316L938 376L834 316V196ZM314 376L418 316L522 376V496L418 556L314 496V376ZM522 376L626 316L730 376V496L626 556L522 496V376ZM730 376L834 316L938 376V496L834 556L730 496V376ZM938 376L1042 316L1146 376V496L1042 556L938 496V376ZM210 556L314 496L418 556V676L314 736L210 676V556ZM418 556L522 496L626 556V676L522 736L418 676V556ZM626 556L730 496L834 556V676L730 736L626 676V556ZM834 556L938 496L1042 556V676L938 736L834 676V556Z"
+              stroke="url(#hexStroke)"
+              strokeWidth="2"
+            />
+            <path
+              d="M314 136L730 136M418 556L938 556M210 316L522 496M522 196L834 376M834 196L1146 376M314 736L626 556M626 736L938 556"
+              stroke="#000000"
+              strokeOpacity="0.18"
+              strokeWidth="1.5"
+            />
+            <ellipse cx="800" cy="420" rx="430" ry="290" fill="url(#hexFocus)" />
+          </svg>
+        </motion.div>
+      </div>
+
       <motion.header
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-        className="max-w-7xl mx-auto w-full px-6 py-6 flex justify-between items-center shrink-0 border-b border-neutral-100"
+        className="relative z-10 mx-auto flex w-full max-w-7xl shrink-0 items-center justify-between border-b border-neutral-100/90 px-6 py-6 backdrop-blur-sm"
       >
         <BrandLockup size="md" />
         <div className="flex items-center space-x-4">
@@ -38,7 +172,7 @@ export function MarketingLanding() {
         </div>
       </motion.header>
 
-      <main className="max-w-5xl mx-auto px-6 py-12 md:py-20 flex-1 flex flex-col justify-center text-center space-y-12">
+      <main className="relative z-10 mx-auto flex max-w-5xl flex-1 flex-col justify-center space-y-12 px-6 py-12 text-center md:py-20">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -50,6 +184,12 @@ export function MarketingLanding() {
             <br />
             Find it in seconds.
           </h1>
+          <div className="mx-auto flex min-h-[2rem] max-w-2xl items-center justify-center">
+            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-neutral-500 md:text-xs">
+              {typedText}
+              <span className="ml-1 inline-block h-[0.95em] w-px animate-pulse bg-neutral-900 align-[-0.1em]" />
+            </p>
+          </div>
           <p className="text-sm md:text-base text-neutral-500 max-w-lg mx-auto leading-relaxed">
             People save YouTube videos, social links, articles, PDFs, screenshots, and notes - then lose
             them forever. Memora listens, transcribes, and maps your knowledge instantly.

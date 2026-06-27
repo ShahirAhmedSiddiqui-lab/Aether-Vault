@@ -2,7 +2,7 @@ import { type SupabaseClient } from '@supabase/supabase-js';
 import { generateKnowledgeItemAnalysis } from '@/lib/ai/service';
 import { type KnowledgeItem } from '@/lib/db';
 import { VAULT_BUCKET } from '@/lib/supabase/vault';
-import { validateVaultUpload } from '@/lib/vault/uploads';
+import { normalizeVaultMimeType, validateVaultUpload } from '@/lib/vault/uploads';
 import {
   buildPreviewMetadata,
   deriveSourceLabel,
@@ -72,13 +72,21 @@ type PreparedDraft = {
   initialImageUrl: string;
 };
 
+type RemotePreviewData = {
+  title?: string;
+  description?: string;
+  thumbnailUrl?: string;
+  provider?: string;
+  authorName?: string;
+};
+
 export async function createAndProcessItem(
   supabase: SupabaseClient,
   userId: string,
   input: ItemDraftInput
 ) {
   validateVaultUpload(input.fileData);
-  const draft = prepareItemDraft(input);
+  const draft = await prepareItemDraft(input);
   const insertedRow = await insertPendingItem(supabase, userId, draft, input.fileData);
 
   try {
@@ -109,7 +117,7 @@ export async function createPendingItem(
   input: ItemDraftInput
 ) {
   validateVaultUpload(input.fileData);
-  const draft = prepareItemDraft(input);
+  const draft = await prepareItemDraft(input);
   const insertedRow = await insertPendingItem(supabase, userId, draft, input.fileData);
 
   try {
@@ -227,7 +235,7 @@ export async function processPendingItem(
   });
 }
 
-function prepareItemDraft(input: ItemDraftInput): PreparedDraft {
+async function prepareItemDraft(input: ItemDraftInput): Promise<PreparedDraft> {
   const url = input.url?.trim() || undefined;
   const content = input.content?.trim() || undefined;
   const itemType = inferItemType(input.requestedType, input.fileData, url);
@@ -235,18 +243,24 @@ function prepareItemDraft(input: ItemDraftInput): PreparedDraft {
     fileData: input.fileData,
     url,
   });
+  const remotePreview = url ? await fetchRemotePreviewData(url) : null;
   const initialSource = deriveSourceLabel(url, input.fileData?.name);
   const previewMetadata = buildPreviewMetadata({
     url,
     fileData: input.fileData,
-    thumbnailUrl: getYouTubeThumbnail(url || ''),
+    thumbnailUrl: getYouTubeThumbnail(url || '') || remotePreview?.thumbnailUrl,
     faviconUrl: getPreviewFavicon(url || '', captureKind),
+    title: remotePreview?.title,
+    description: remotePreview?.description,
+    authorName: remotePreview?.authorName,
+    provider: remotePreview?.provider,
   });
-  const initialTitle = getInitialItemTitle({
-    content,
-    url,
-    fileName: input.fileData?.name,
-  });
+  const initialTitle = remotePreview?.title?.trim()
+    || getInitialItemTitle({
+      content,
+      url,
+      fileName: input.fileData?.name,
+    });
   const storedContent = getStoredItemContent({
     content,
     url,
@@ -264,7 +278,9 @@ function prepareItemDraft(input: ItemDraftInput): PreparedDraft {
     initialSource,
     storedContent,
     extractedText: content,
-    initialImageUrl: itemType === 'Images' ? '' : getDefaultPreviewImage(itemType),
+    initialImageUrl: itemType === 'Images'
+      ? ''
+      : previewMetadata.thumbnailUrl || getDefaultPreviewImage(itemType),
   };
 }
 
@@ -388,14 +404,14 @@ async function processItem(
         processing_status: 'ready',
         failure_reason: null,
         tags: aiAnalysis.tags,
-        source: options.fileData?.name ?? (aiAnalysis.source || options.initialSource),
-        author: aiAnalysis.author ?? null,
+        source: options.fileData?.name ?? (aiAnalysis.source || options.previewMetadata.provider || options.initialSource),
+        author: aiAnalysis.author ?? options.previewMetadata.authorName ?? null,
         preview_metadata: options.previewMetadata,
         flashcards: aiAnalysis.flashcards.map((card, index) => ({
           ...card,
           id: `fc-gen-${index}-${Date.now()}`,
         })),
-        image_url: options.initialImageUrl || null,
+        image_url: options.previewMetadata.thumbnailUrl || options.initialImageUrl || null,
         read_time: aiAnalysis.readTime,
         is_synthesized: true,
         file_path: options.filePath ?? item.file_path ?? null,
@@ -520,7 +536,7 @@ function normalizePreviewMetadata(value: unknown, item: KnowledgeItemRow): ItemP
     url: item.url ?? undefined,
     fileData: item.file_mime
       ? {
-          mimeType: item.file_mime,
+          mimeType: normalizeVaultMimeType(item.file_mime),
           name: item.file_name ?? undefined,
         }
       : undefined,
@@ -569,5 +585,132 @@ function getPreviewFavicon(urlInput: string, captureKind: SupportedItemCaptureKi
     return `https://www.google.com/s2/favicons?sz=128&domain=${domain}`;
   } catch {
     return null;
+  }
+}
+
+async function fetchRemotePreviewData(url: string): Promise<RemotePreviewData | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 MemoraBot/1.0',
+      },
+      cache: 'no-store',
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/html')) {
+      return null;
+    }
+
+    const html = await response.text();
+    const provider = detectPreviewProvider(url, html);
+    const thumbnailUrl = resolvePreviewUrl(
+      url,
+      findMetaContent(html, ['property', 'og:image'])
+      || findMetaContent(html, ['property', 'og:image:secure_url'])
+      || findMetaContent(html, ['name', 'og:image'])
+      || findMetaContent(html, ['name', 'twitter:image'])
+      || findMetaContent(html, ['property', 'twitter:image'])
+      || findMetaContent(html, ['property', 'twitter:image:src'])
+      || findMetaContent(html, ['itemprop', 'image'])
+    );
+    const title =
+      findMetaContent(html, ['property', 'og:title'])
+      || findMetaContent(html, ['name', 'og:title'])
+      || findMetaContent(html, ['name', 'twitter:title'])
+      || findMetaContent(html, ['property', 'twitter:title'])
+      || extractHtmlTag(html, 'title');
+    const description =
+      findMetaContent(html, ['property', 'og:description'])
+      || findMetaContent(html, ['name', 'og:description'])
+      || findMetaContent(html, ['name', 'twitter:description'])
+      || findMetaContent(html, ['property', 'twitter:description'])
+      || findMetaContent(html, ['name', 'description']);
+    const authorName =
+      findMetaContent(html, ['name', 'author'])
+      || findMetaContent(html, ['property', 'article:author'])
+      || findMetaContent(html, ['property', 'og:article:author'])
+      || findMetaContent(html, ['name', 'twitter:creator']);
+
+    return {
+      title: title || undefined,
+      description: description || undefined,
+      thumbnailUrl: thumbnailUrl || undefined,
+      provider,
+      authorName: authorName || undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function detectPreviewProvider(url: string, html: string) {
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+
+    if (hostname === 'x.com' || hostname === 'twitter.com') {
+      return 'X';
+    }
+    if (hostname.includes('linkedin.com')) {
+      return 'LinkedIn';
+    }
+    if (hostname.includes('instagram.com')) {
+      return 'Instagram';
+    }
+
+    return findMetaContent(html, ['property', 'og:site_name']) || hostname;
+  } catch {
+    return findMetaContent(html, ['property', 'og:site_name']) || undefined;
+  }
+}
+
+function findMetaContent(html: string, attribute: [string, string]) {
+  const [name, value] = attribute;
+  const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const patterns = [
+    new RegExp(`<meta[^>]*${name}=["']${escapedValue}["'][^>]*content=["']([^"']+)["'][^>]*>`, 'i'),
+    new RegExp(`<meta[^>]*content=["']([^"']+)["'][^>]*${name}=["']${escapedValue}["'][^>]*>`, 'i'),
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    const content = normalizePreviewText(match?.[1] || '');
+    if (content) {
+      return content;
+    }
+  }
+
+  return '';
+}
+
+function extractHtmlTag(html: string, tagName: string) {
+  const match = html.match(new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'i'));
+  return normalizePreviewText(match?.[1] || '');
+}
+
+function normalizePreviewText(value: string) {
+  return value
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function resolvePreviewUrl(baseUrl: string, candidate: string) {
+  if (!candidate) {
+    return '';
+  }
+
+  try {
+    return new URL(candidate, baseUrl).toString();
+  } catch {
+    return candidate;
   }
 }

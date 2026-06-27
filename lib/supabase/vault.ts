@@ -134,6 +134,18 @@ function normalizePreviewMetadata(value: unknown): ItemPreviewMetadata | undefin
     previewMetadata.sourceUrl = metadata.sourceUrl;
   }
 
+  if (typeof metadata.title === 'string') {
+    previewMetadata.title = metadata.title;
+  }
+
+  if (typeof metadata.description === 'string') {
+    previewMetadata.description = metadata.description;
+  }
+
+  if (typeof metadata.authorName === 'string') {
+    previewMetadata.authorName = metadata.authorName;
+  }
+
   if (typeof metadata.fileName === 'string') {
     previewMetadata.fileName = metadata.fileName;
   }

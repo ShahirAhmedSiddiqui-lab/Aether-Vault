@@ -219,31 +219,47 @@ export function VaultDetailPanel({
 
           {currentItem.type === 'Videos' && (
             <div className="space-y-2">
-              {currentItem.url && (currentItem.url.includes('youtube') || currentItem.url.includes('youtu.be')) ? (
-                <div className="relative aspect-video w-full rounded-lg overflow-hidden border border-neutral-200 bg-black">
-                  <iframe
-                    className="absolute inset-0 w-full h-full"
-                    src={`https://www.youtube.com/embed/${getYouTubeEmbedId(currentItem.url)}`}
-                    title="YouTube Video Preview"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
+              {currentItem.url ? (
+                <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
+                  <div className="relative aspect-video w-full bg-neutral-100">
+                    {currentItem.previewMetadata?.thumbnailUrl ? (
+                      <img
+                        src={currentItem.previewMetadata.thumbnailUrl}
+                        alt={currentItem.title}
+                        className="h-full w-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-neutral-950 text-white">
+                        <Play className="h-8 w-8" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/10 to-transparent" />
+                    <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 text-white">
+                      <div className="min-w-0">
+                        <div className="truncate text-[10px] font-bold font-mono uppercase tracking-widest text-white/80">
+                          {currentItem.source}
+                        </div>
+                        <div className="truncate text-xs font-semibold">
+                          {currentItem.author || 'Video source preview'}
+                        </div>
+                      </div>
+                      <a
+                        href={currentItem.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/40 bg-white/15 px-3 py-1.5 text-[10px] font-bold font-mono text-white backdrop-blur-sm transition hover:bg-white/25"
+                      >
+                        <span>Open video</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="p-4 bg-white border border-neutral-200 rounded-lg text-center font-mono space-y-1.5">
                   <Play className="w-5 h-5 mx-auto text-neutral-400" />
                   <span className="text-[10px] text-neutral-600 block font-semibold">Video Link Bookmark</span>
-                  {currentItem.url && (
-                    <a
-                      href={currentItem.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[9px] text-neutral-900 border border-neutral-200 bg-neutral-50 hover:bg-neutral-100 rounded px-2 py-1 inline-flex items-center space-x-1"
-                    >
-                      <span>Open video source</span>
-                      <ExternalLink className="w-2.5 h-2.5" />
-                    </a>
-                  )}
                 </div>
               )}
             </div>
@@ -322,6 +338,29 @@ export function VaultDetailPanel({
 
           {currentItem.type === 'Articles' && (
             <div className="space-y-2">
+              {currentItem.previewMetadata?.thumbnailUrl && (
+                <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
+                  <img
+                    src={currentItem.previewMetadata.thumbnailUrl}
+                    alt={currentItem.previewMetadata.title || currentItem.title}
+                    className="h-52 w-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              )}
+              {(currentItem.previewMetadata?.title || currentItem.previewMetadata?.description) && (
+                <div className="rounded-lg border border-neutral-200 bg-white p-3 text-left">
+                  <div className="text-[9px] font-bold font-mono uppercase tracking-wider text-neutral-400">
+                    Article Preview
+                  </div>
+                  {currentItem.previewMetadata?.title && (
+                    <div className="mt-1 text-xs font-semibold text-neutral-900">{currentItem.previewMetadata.title}</div>
+                  )}
+                  {currentItem.previewMetadata?.description && (
+                    <p className="mt-1 text-[11px] leading-relaxed text-neutral-600">{currentItem.previewMetadata.description}</p>
+                  )}
+                </div>
+              )}
               <div className="p-3.5 bg-white border border-neutral-200 rounded-lg max-h-48 overflow-y-auto leading-relaxed text-left text-xs text-neutral-800">
                 {currentItem.content}
               </div>
@@ -339,17 +378,38 @@ export function VaultDetailPanel({
 
           {currentItem.type === 'Social Links' && (
             <div className="space-y-2">
+              {currentItem.previewMetadata?.thumbnailUrl && (
+                <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                  <img
+                    src={currentItem.previewMetadata.thumbnailUrl}
+                    alt={currentItem.previewMetadata.title || currentItem.title}
+                    className="h-52 w-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              )}
               <div className="p-4 bg-neutral-950 text-white rounded-xl space-y-2.5 text-left border border-neutral-800">
                 <div className="flex items-center space-x-2">
                   <div className="w-6 h-6 rounded-full bg-neutral-800 flex items-center justify-center font-mono text-[9px] font-bold text-neutral-300 uppercase">
                     {currentItem.source ? currentItem.source.substring(0, 2) : 'S'}
                   </div>
                   <div>
-                    <div className="text-[10px] font-bold truncate max-w-[125px]">{currentItem.author || currentItem.source || 'Social Media Link'}</div>
-                    <div className="text-[8px] text-neutral-400 font-mono">Social Feed Archive</div>
+                    <div className="text-[10px] font-bold truncate max-w-[180px]">
+                      {currentItem.previewMetadata?.authorName || currentItem.author || currentItem.source || 'Social Media Link'}
+                    </div>
+                    <div className="text-[8px] text-neutral-400 font-mono">
+                      {currentItem.previewMetadata?.provider || 'Social Feed Archive'}
+                    </div>
                   </div>
                 </div>
-                <p className="text-xs leading-relaxed font-sans italic text-neutral-200">&ldquo;{currentItem.content}&rdquo;</p>
+                {currentItem.previewMetadata?.title && (
+                  <div className="text-xs font-semibold leading-relaxed text-white">{currentItem.previewMetadata.title}</div>
+                )}
+                {currentItem.previewMetadata?.description ? (
+                  <p className="text-xs leading-relaxed font-sans italic text-neutral-200">{currentItem.previewMetadata.description}</p>
+                ) : (
+                  <p className="text-xs leading-relaxed font-sans italic text-neutral-200">&ldquo;{currentItem.content}&rdquo;</p>
+                )}
 
                 {currentItem.url && (
                   <div className="pt-2.5 border-t border-neutral-800/80 flex justify-end text-[10px]">
@@ -497,9 +557,3 @@ export function VaultDetailPanel({
   );
 }
 
-function getYouTubeEmbedId(url?: string): string | null {
-  if (!url) return null;
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-  const match = url.match(regExp);
-  return match && match[2].length === 11 ? match[2] : null;
-}

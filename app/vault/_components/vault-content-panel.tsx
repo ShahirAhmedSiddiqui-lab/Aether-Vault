@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
 import * as React from 'react';
 import { motion } from 'motion/react';
 import { Activity, ArrowRight, Bookmark, ChevronDown, Inbox, LoaderCircle, RefreshCw, RotateCcw, Trash2, X } from 'lucide-react';
@@ -389,6 +391,17 @@ export function VaultContentPanel({
                 isSelected ? 'ring-1.5 ring-neutral-900 border-transparent shadow shadow-neutral-100' : 'border-neutral-200 hover:border-neutral-300 shadow-sm'
               )}
             >
+              {(item.type === 'Articles' || item.type === 'Social Links') && item.previewMetadata?.thumbnailUrl && (
+                <div className="mb-3 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100">
+                  <img
+                    src={item.previewMetadata.thumbnailUrl}
+                    alt={item.previewMetadata.title || item.title}
+                    className="h-32 w-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              )}
+
               <div className="flex justify-between items-start mb-3">
                 <span
                   className={cn(
@@ -457,7 +470,11 @@ export function VaultContentPanel({
 
               <div className="space-y-1.5">
                 <h3 className={cn('font-bold text-neutral-900 leading-snug line-clamp-2', compactMode ? 'text-[11px]' : 'text-xs')}>{item.title}</h3>
-                <p className="text-neutral-500 text-[11px] leading-relaxed line-clamp-3">{item.summary}</p>
+                <p className="text-neutral-500 text-[11px] leading-relaxed line-clamp-3">
+                  {item.previewMetadata?.description && (item.type === 'Articles' || item.type === 'Social Links')
+                    ? item.previewMetadata.description
+                    : item.summary}
+                </p>
               </div>
 
               {!isTrashView && item.processingStatus !== 'ready' && item.processingStatus !== 'trashed' && (
@@ -481,7 +498,9 @@ export function VaultContentPanel({
               <div className="flex flex-wrap items-center gap-1.5 pt-4 mt-auto border-t border-neutral-105/10">
                 <span className="text-[10px] text-neutral-400 font-mono tracking-widest uppercase shrink-0">{item.source}</span>
                 <span className="text-neutral-300 select-none text-[10px]">&bull;</span>
-                <span className="text-[10.5px] text-neutral-400 font-mono">{item.readTime || '3 min'}</span>
+                <span className="text-[10.5px] text-neutral-400 font-mono">
+                  {item.type === 'Videos' && item.author ? item.author : item.readTime || '3 min'}
+                </span>
               </div>
             </motion.div>
           );

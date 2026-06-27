@@ -13,6 +13,9 @@ export interface ItemPreviewMetadata {
   faviconUrl?: string;
   provider?: string;
   sourceUrl?: string;
+  title?: string;
+  description?: string;
+  authorName?: string;
   fileName?: string;
   mimeType?: string;
   byteSize?: number;
