@@ -23,7 +23,7 @@ import {
   Bookmark,
   Trash2,
 } from 'lucide-react';
-import { ChatMessage, ChatSession, KnowledgeItem } from '@/lib/db';
+import { ChatMessage, ChatPreviewResult, ChatReferencedSource, ChatSession, KnowledgeItem, UserPreferences } from '@/lib/db';
 import { matchesSearch } from '@/lib/supabase/vault';
 import { cn } from '@/lib/utils';
 import { BrandLockup } from '@/app/_components/brand-lockup';
@@ -36,7 +36,13 @@ type VaultIdentity = {
   fullName?: string;
   email?: string;
   avatarUrl?: string;
-  defaultVoiceSpeed?: number;
+  preferences?: UserPreferences;
+};
+
+type VaultWorkspaceProps = {
+  identity?: VaultIdentity;
+  initialItems?: KnowledgeItem[];
+  initialChatSessions?: ChatSession[];
 };
 
 type ConfirmDialogState = {
@@ -113,14 +119,41 @@ const captureCopy: Record<
   },
 };
 
-export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
+function getSupportedAudioMimeType() {
+  if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
+    return '';
+  }
+
+  const supportedTypes = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/mpeg',
+    'audio/ogg;codecs=opus',
+  ];
+
+  return supportedTypes.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) ?? '';
+}
+
+function getResponseStylePrompt(style: UserPreferences['brainResponseStyle']) {
+  switch (style) {
+    case 'concise':
+      return 'Provide a concise synthesis bullet list with only the most important points.';
+    case 'detailed':
+      return 'Provide a detailed synthesis with key bullets, supporting specifics, and useful nuance.';
+    default:
+      return 'Provide a balanced synthesis with clear bullets and the right amount of detail.';
+  }
+}
+
+export function VaultWorkspace({ identity, initialItems = [], initialChatSessions = [] }: VaultWorkspaceProps) {
   const hasMountedTabStateRef = React.useRef(false);
   const [currentTab, setCurrentTab] = React.useState<VaultTab>('Overview');
-  const [items, setItems] = React.useState<KnowledgeItem[]>([]);
+  const [items, setItems] = React.useState<KnowledgeItem[]>(initialItems);
   const [chats, setChats] = React.useState<ChatMessage[]>([]);
-  const [chatSessions, setChatSessions] = React.useState<ChatSession[]>([]);
-  const [activeChatSessionId, setActiveChatSessionId] = React.useState<string>('');
-  const [selectedItemId, setSelectedItemId] = React.useState<string>('');
+  const [chatSessions, setChatSessions] = React.useState<ChatSession[]>(initialChatSessions);
+  const [activeChatSessionId, setActiveChatSessionId] = React.useState<string>(initialChatSessions[0]?.id ?? '');
+  const [selectedItemId, setSelectedItemId] = React.useState<string>(() => initialItems.find((item) => !item.deletedAt)?.id ?? initialItems[0]?.id ?? '');
   const [searchQuery, setSearchQuery] = React.useState('');
   const [typeFilter, setTypeFilter] = React.useState<VaultTypeFilter>('All');
   const [recencyFilter, setRecencyFilter] = React.useState<VaultRecencyFilter>('any');
@@ -138,11 +171,11 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
   const [recorderBlob, setRecorderBlob] = React.useState<Blob | null>(null);
   const [recorderUrl, setRecorderUrl] = React.useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
-  const [voiceSpeed, setVoiceSpeed] = React.useState(identity?.defaultVoiceSpeed ?? 1.0);
+  const [voiceSpeed, setVoiceSpeed] = React.useState<number>(identity?.preferences?.defaultVoiceSpeed ?? 1.0);
   const [inlineInput, setInlineInput] = React.useState('');
   const [isInlineGenerating, setIsInlineGenerating] = React.useState(false);
   const [localAskQuery, setLocalAskQuery] = React.useState('');
-  const [localAskAnswer, setLocalAskAnswer] = React.useState<string | null>(null);
+  const [localAskResult, setLocalAskResult] = React.useState<ChatPreviewResult | null>(null);
   const [localAskLoading, setLocalAskLoading] = React.useState(false);
   const [flippedCardId, setFlippedCardId] = React.useState<string | null>(null);
   const [isSendingChat, setIsSendingChat] = React.useState(false);
@@ -153,6 +186,8 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
   const [isDetailFullscreen, setIsDetailFullscreen] = React.useState(false);
 
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = React.useRef<MediaStream | null>(null);
+  const recorderUrlRef = React.useRef<string | null>(null);
   const timerRef = React.useRef<any>(null);
   const chatScrollContainerRef = React.useRef<HTMLDivElement | null>(null);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
@@ -161,6 +196,10 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
 
   const displayName = identity?.fullName?.trim() || 'Vault User';
   const displayEmail = identity?.email?.trim() || 'your-vault@memora.local';
+  const preferences = identity?.preferences;
+  const responseStyle = preferences?.brainResponseStyle ?? 'balanced';
+  const reduceMotion = preferences?.reduceMotion ?? false;
+  const compactMode = preferences?.compactMode ?? false;
   const avatarLetter = displayName.charAt(0).toUpperCase() || 'V';
   const activeCaptureCopy = captureCopy[captureType];
   const currentSectionLabel =
@@ -216,6 +255,28 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
     }
   }, [voiceSpeed, selectedItemId]);
 
+  React.useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+      }
+
+      if (recorderUrlRef.current) {
+        URL.revokeObjectURL(recorderUrlRef.current);
+        recorderUrlRef.current = null;
+      }
+    };
+  }, []);
+
   const closeConfirmDialog = React.useCallback((confirmed: boolean) => {
     if (confirmResolverRef.current) {
       confirmResolverRef.current(confirmed);
@@ -255,6 +316,37 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
       window.removeEventListener('keydown', handleEscape);
     };
   }, [closeConfirmDialog, confirmDialog]);
+
+  const getPreferredTabForItem = React.useCallback((item: KnowledgeItem): VaultTab => {
+    if (item.deletedAt) {
+      return 'Trash';
+    }
+
+    return item.type;
+  }, []);
+
+  const openReferencedItem = React.useCallback(
+    (source: ChatReferencedSource, options?: { toast?: boolean }) => {
+      const found = source.itemId
+        ? items.find((item) => item.id === source.itemId)
+        : items.find((item) => item.title.toLowerCase() === source.title.toLowerCase());
+
+      if (!found) {
+        showToast(`Original source reference: ${source.title}`);
+        return;
+      }
+
+      setSelectedItemId(found.id);
+      setIsDetailPanelOpen(true);
+      setIsDetailFullscreen(false);
+      setCurrentTab(getPreferredTabForItem(found));
+
+      if (options?.toast !== false) {
+        showToast(`Opened referenced card: ${found.title}`);
+      }
+    },
+    [getPreferredTabForItem, items, showToast]
+  );
 
   const upsertItem = React.useCallback((nextItem: KnowledgeItem) => {
     setItems((prev) => {
@@ -312,7 +404,10 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
   const resetCaptureState = React.useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
     }
     setIsRecording(false);
     setCaptureUrl('');
@@ -320,11 +415,19 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
     setUploadFile(null);
     setUploadFileBase64('');
     setRecorderBlob(null);
+    if (recorderUrlRef.current) {
+      URL.revokeObjectURL(recorderUrlRef.current);
+      recorderUrlRef.current = null;
+    }
     setRecorderUrl(null);
     setRecordingDuration(0);
   }, []);
 
   React.useEffect(() => {
+    if (initialItems.length > 0) {
+      return;
+    }
+
     let cancelled = false;
 
     const loadItems = async () => {
@@ -353,7 +456,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initialItems.length]);
 
   React.useEffect(() => {
     const pendingItems = items.filter((item) => item.processingStatus === 'pending' && !item.deletedAt);
@@ -498,15 +601,42 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
 
   const startVoiceRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const options = { mimeType: 'audio/webm' };
-      let mediaRecorder;
-
-      try {
-        mediaRecorder = new MediaRecorder(stream, options);
-      } catch {
-        mediaRecorder = new MediaRecorder(stream);
+      if (typeof window === 'undefined' || !window.isSecureContext) {
+        throw new Error('secure_context_required');
       }
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('media_devices_unavailable');
+      }
+
+      if (typeof MediaRecorder === 'undefined') {
+        throw new Error('media_recorder_unavailable');
+      }
+
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      setUploadFile(null);
+      setUploadFileBase64('');
+      setRecorderBlob(null);
+
+      if (recorderUrlRef.current) {
+        URL.revokeObjectURL(recorderUrlRef.current);
+        recorderUrlRef.current = null;
+      }
+      setRecorderUrl(null);
+
+      const supportedMimeType = getSupportedAudioMimeType();
+      const mediaRecorder = supportedMimeType
+        ? new MediaRecorder(stream, { mimeType: supportedMimeType })
+        : new MediaRecorder(stream);
 
       mediaRecorderRef.current = mediaRecorder;
       const chunks: Blob[] = [];
@@ -518,9 +648,11 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const blobType = mediaRecorder.mimeType || supportedMimeType || chunks[0]?.type || 'audio/webm';
+        const blob = new Blob(chunks, { type: blobType });
         setRecorderBlob(blob);
         const url = URL.createObjectURL(blob);
+        recorderUrlRef.current = url;
         setRecorderUrl(url);
 
         const reader = new FileReader();
@@ -530,22 +662,44 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
           const rawBase64 = base64data.split(',')[1] || base64data;
           setUploadFileBase64(rawBase64);
         };
+
+        stream.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+      };
+
+      mediaRecorder.onerror = () => {
+        showToast('Audio recording failed. Please try again.');
       };
 
       setRecordingDuration(0);
       setIsRecording(true);
-      mediaRecorder.start();
+      mediaRecorder.start(250);
     } catch (err) {
       console.error('Failed to start recording:', err);
-      showToast('Microphone access denied or audio recording failed.');
+      if (err instanceof Error && err.message === 'secure_context_required') {
+        showToast('Microphone recording only works on a secure HTTPS or localhost session.');
+        return;
+      }
+
+      if (err instanceof Error && err.message === 'media_devices_unavailable') {
+        showToast('This browser does not expose microphone access for recording.');
+        return;
+      }
+
+      if (err instanceof Error && err.message === 'media_recorder_unavailable') {
+        showToast('This browser cannot record audio yet. Please upload an audio file instead.');
+        return;
+      }
+
+      showToast('Microphone permission was denied or audio recording failed.');
     }
   };
 
   const stopVoiceRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.requestData?.();
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
     }
   };
 
@@ -553,6 +707,21 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+    if (recorderUrlRef.current) {
+      URL.revokeObjectURL(recorderUrlRef.current);
+      recorderUrlRef.current = null;
+    }
+    setRecorderBlob(null);
+    setRecorderUrl(null);
+    setRecordingDuration(0);
     setUploadFile(file);
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -893,7 +1062,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
     if (localAskLoading || !localAskQuery.trim()) return;
 
     setLocalAskLoading(true);
-    setLocalAskAnswer(null);
+    setLocalAskResult(null);
     const relevantContext = items.filter((item) => {
       if (currentTab === 'Trash') {
         return !!item.deletedAt;
@@ -909,26 +1078,38 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
 
       return currentTab === 'Overview' || item.type === currentTab;
     });
-    const contextText = relevantContext.map((i) => `${i.title}: ${i.summary}`).join('\n\n');
+    const scopedItemIds = relevantContext.slice(0, 40).map((item) => item.id);
 
     try {
-      const sessionId = await ensureActiveChatSession();
-      const res = await fetch(`/api/chat/sessions/${sessionId}/messages`, {
+      const res = await fetch('/api/chats', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: `Provide a concise synthesis bullet list based on my query: ${localAskQuery}. Context of my saved documents: ${contextText}`,
+          query: `${getResponseStylePrompt(responseStyle)} ${localAskQuery}`,
           persist: false,
+          itemIds: scopedItemIds,
         }),
       });
 
       if (res.ok) {
         const data = await res.json();
-        setLocalAskAnswer(data.modelMessage.content);
+        setLocalAskResult({
+          answer: data.modelMessage.content,
+          summaryBlock: data.modelMessage.summaryBlock,
+          referencedSources: data.modelMessage.referencedSources,
+          tags: data.modelMessage.tags,
+        });
         setLocalAskQuery('');
+      } else {
+        throw new Error('Local ask failed');
       }
     } catch {
-      setLocalAskAnswer('Unable to query context at this time.');
+      setLocalAskResult({
+        answer: 'Unable to query context at this time.',
+        summaryBlock: 'The scoped vault search could not complete right now. Please try again.',
+        referencedSources: [],
+        tags: ['Search Error'],
+      });
     } finally {
       setLocalAskLoading(false);
     }
@@ -1219,7 +1400,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                 placeholder="Search concepts, source tags..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="memora-soft-outline w-full rounded-xl border border-neutral-200 bg-neutral-50 py-2 pl-10 pr-14 text-xs text-neutral-900 placeholder-neutral-400 transition focus:border-neutral-900 focus:bg-white focus:outline-none"
+                className="memora-soft-outline memora-flat-input w-full rounded-xl border border-neutral-200 bg-neutral-50 py-2 pl-10 pr-14 text-xs text-neutral-900 placeholder-neutral-400 transition focus:border-neutral-900 focus:bg-white focus:outline-none"
               />
               {searchQuery && (
                 <button onClick={() => setSearchQuery('')} className="absolute right-2.5 text-[10px] text-neutral-400 hover:text-neutral-900">
@@ -1320,10 +1501,12 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                   recencyFilter={recencyFilter}
                   bookmarkFilter={bookmarkFilter}
                   selectedItemId={selectedItemId}
+                  compactMode={compactMode}
+                  reduceMotion={reduceMotion}
                   inlineInput={inlineInput}
                   isInlineGenerating={isInlineGenerating}
                   localAskQuery={localAskQuery}
-                  localAskAnswer={localAskAnswer}
+                  localAskResult={localAskResult}
                   localAskLoading={localAskLoading}
                   onInlineInputChange={setInlineInput}
                   onLocalAskQueryChange={setLocalAskQuery}
@@ -1332,7 +1515,8 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                   onBookmarkFilterChange={setBookmarkFilter}
                   onInlineCapture={handleInlineCapture}
                   onRunLocalAskAI={runLocalAskAI}
-                  onClearLocalAskAnswer={() => setLocalAskAnswer(null)}
+                  onClearLocalAskAnswer={() => setLocalAskResult(null)}
+                  onOpenReferencedItem={(source) => openReferencedItem(source, { toast: false })}
                   onSelectItem={(id) => {
                     setSelectedItemId(id);
                     setFlippedCardId(null);
@@ -1353,6 +1537,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                   currentItem={currentItem}
                   isTrashView={currentTab === 'Trash'}
                   isFullscreen={isDetailFullscreen}
+                  reduceMotion={reduceMotion}
                   flippedCardId={flippedCardId}
                   voiceSpeed={voiceSpeed}
                   audioRef={audioRef}
@@ -1469,6 +1654,21 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                             )}
                           </motion.div>
                         )}
+
+                        {chat.role === 'model' && chat.referencedSources && chat.referencedSources.length > 0 && (
+                          <div className="flex w-full flex-wrap gap-2">
+                            {chat.referencedSources.map((source, index) => (
+                              <button
+                                key={`${source.itemId ?? source.title}-${index}`}
+                                type="button"
+                                onClick={() => openReferencedItem(source, { toast: false })}
+                                className="rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[10px] font-mono text-neutral-700 transition hover:border-neutral-900 hover:text-neutral-950"
+                              >
+                                {source.source}: {source.title}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))
                   )}
@@ -1495,7 +1695,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                       placeholder="Ask your second mind any saved topic questions..."
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
-                      className="flex-1 px-4 py-2 bg-transparent border-none text-xs text-neutral-950 placeholder-neutral-400 focus:outline-none"
+                      className="memora-flat-input flex-1 px-4 py-2 bg-transparent border-none text-xs text-neutral-950 placeholder-neutral-400 focus:outline-none"
                     />
                     <button
                       type="submit"
@@ -1551,20 +1751,7 @@ export function VaultWorkspace({ identity }: { identity?: VaultIdentity }) {
                           <div
                             key={idx}
                             className="p-3 bg-neutral-50 border border-neutral-200 hover:border-neutral-900 rounded-xl text-left cursor-pointer transition group"
-                            onClick={() => {
-                              const found = src.itemId
-                                ? items.find((item) => item.id === src.itemId)
-                                : items.find((item) => item.title.toLowerCase() === src.title.toLowerCase());
-                              if (found) {
-                                setSelectedItemId(found.id);
-                                setIsDetailPanelOpen(true);
-                                setIsDetailFullscreen(false);
-                                setCurrentTab('Overview');
-                                showToast(`Loaded referenced sheet: ${src.title}`);
-                              } else {
-                                showToast(`Original source reference: ${src.title}`);
-                              }
-                            }}
+                            onClick={() => openReferencedItem(src)}
                           >
                             <div className="flex items-center space-x-1.5 text-[9px] text-neutral-900 font-bold mb-1 font-mono uppercase">
                               {src.type === 'video' ? (

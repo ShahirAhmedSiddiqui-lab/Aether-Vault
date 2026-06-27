@@ -1,5 +1,5 @@
-import { type Flashcard, type KnowledgeItem } from '@/lib/db';
-import { askSecondBrain, summarizeAndExtract } from '@/lib/gemini';
+import { type BrainResponseStyle, type Flashcard, type KnowledgeItem } from '@/lib/db';
+import { answerFromGeneralKnowledge, askSecondBrain, summarizeAndExtract } from '@/lib/gemini';
 
 type UploadedFileData = {
   base64: string;
@@ -27,7 +27,7 @@ type VaultChatResult = {
   tags: string[];
 };
 
-const MAX_RETRIEVED_ITEMS = 6;
+const MAX_RETRIEVED_ITEMS = 10;
 const STOP_WORDS = new Set([
   'a',
   'an',
@@ -86,21 +86,25 @@ export async function generateKnowledgeItemAnalysis(
 export async function generateVaultChatAnswer(
   query: string,
   items: KnowledgeItem[],
-  chatHistory: VaultChatHistory
+  chatHistory: VaultChatHistory,
+  options?: {
+    responseStyle?: BrainResponseStyle;
+  }
 ): Promise<VaultChatResult> {
   const readyItems = items.filter((item) => item.processingStatus === 'ready' && !item.deletedAt);
+  const responseStyle = options?.responseStyle;
 
   if (readyItems.length === 0) {
-    return buildEmptyVaultChatResponse();
+    return buildNoResultsChatResponse(query, responseStyle);
   }
 
   const retrievedItems = retrieveRelevantVaultItems(query, readyItems);
 
   if (retrievedItems.length === 0) {
-    return buildNoResultsChatResponse(query);
+    return buildNoResultsChatResponse(query, responseStyle);
   }
 
-  const response = await askSecondBrain(query, retrievedItems, chatHistory);
+  const response = await askSecondBrain(query, retrievedItems, chatHistory, responseStyle);
   const referencedSources = resolveReferencedSources(response.referencedSources, retrievedItems);
 
   return {
@@ -310,12 +314,16 @@ function buildEmptyVaultChatResponse(): VaultChatResult {
   };
 }
 
-function buildNoResultsChatResponse(query: string): VaultChatResult {
+async function buildNoResultsChatResponse(
+  query: string,
+  responseStyle?: BrainResponseStyle
+): Promise<VaultChatResult> {
+  const generalResponse = await answerFromGeneralKnowledge(query, responseStyle);
+
   return {
-    answer: `I couldn't find a saved source in your vault that answers "${query.trim()}" yet.`,
-    summaryBlock:
-      'I only answer from your ready, non-trashed vault items. Try rephrasing the query, save a related source, or wait for processing to finish before asking again.',
+    answer: generalResponse.answer,
+    summaryBlock: generalResponse.summaryBlock,
     referencedSources: [],
-    tags: ['No Results', 'Grounded Search'],
+    tags: generalResponse.tags ?? ['No Results', 'General Reasoning'],
   };
 }

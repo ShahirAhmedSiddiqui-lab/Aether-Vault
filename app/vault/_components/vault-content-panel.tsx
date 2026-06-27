@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { motion } from 'motion/react';
 import { Activity, ArrowRight, Bookmark, ChevronDown, Inbox, LoaderCircle, RefreshCw, RotateCcw, Trash2, X } from 'lucide-react';
-import { KnowledgeItem } from '@/lib/db';
+import { ChatPreviewResult, ChatReferencedSource, KnowledgeItem } from '@/lib/db';
 import { matchesSearch } from '@/lib/supabase/vault';
 import { cn } from '@/lib/utils';
 import { FormattedMarkdown } from './formatted-markdown';
@@ -18,10 +18,12 @@ type VaultContentPanelProps = {
   recencyFilter: 'any' | 'today' | '7d' | '30d' | '90d';
   bookmarkFilter: 'all' | 'bookmarked' | 'unbookmarked';
   selectedItemId: string;
+  compactMode: boolean;
+  reduceMotion: boolean;
   inlineInput: string;
   isInlineGenerating: boolean;
   localAskQuery: string;
-  localAskAnswer: string | null;
+  localAskResult: ChatPreviewResult | null;
   localAskLoading: boolean;
   onInlineInputChange: (value: string) => void;
   onLocalAskQueryChange: (value: string) => void;
@@ -31,6 +33,7 @@ type VaultContentPanelProps = {
   onInlineCapture: (event: React.FormEvent) => void;
   onRunLocalAskAI: (event: React.FormEvent) => void;
   onClearLocalAskAnswer: () => void;
+  onOpenReferencedItem: (source: ChatReferencedSource) => void;
   onSelectItem: (id: string) => void;
   onToggleBookmark: (id: string, currentStatus: boolean, event?: React.MouseEvent) => void;
   onDeleteItem: (id: string, event: React.MouseEvent) => void;
@@ -49,10 +52,12 @@ export function VaultContentPanel({
   recencyFilter,
   bookmarkFilter,
   selectedItemId,
+  compactMode,
+  reduceMotion,
   inlineInput,
   isInlineGenerating,
   localAskQuery,
-  localAskAnswer,
+  localAskResult,
   localAskLoading,
   onInlineInputChange,
   onLocalAskQueryChange,
@@ -62,6 +67,7 @@ export function VaultContentPanel({
   onInlineCapture,
   onRunLocalAskAI,
   onClearLocalAskAnswer,
+  onOpenReferencedItem,
   onSelectItem,
   onToggleBookmark,
   onDeleteItem,
@@ -157,8 +163,8 @@ export function VaultContentPanel({
   }, [items]);
 
   return (
-    <div className="app-scrollbar flex-1 flex flex-col overflow-y-auto border-r border-neutral-200/80 bg-[#fafafc] px-6 py-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className={cn('app-scrollbar flex flex-1 flex-col overflow-y-auto border-r border-neutral-200/80 bg-[#fafafc]', compactMode ? 'px-4 py-4' : 'px-6 py-6')}>
+      <div className={cn('flex items-center justify-between', compactMode ? 'mb-4' : 'mb-6')}>
         <div>
           <h2 className="text-base font-bold tracking-tight text-neutral-900">
             {currentTab === 'Overview'
@@ -189,7 +195,7 @@ export function VaultContentPanel({
 
       {currentTab === 'Overview' && isFiltersOpen && (
         <motion.div
-          initial={{ opacity: 0, y: -6 }}
+          initial={reduceMotion ? false : { opacity: 0, y: -6 }}
           animate={{ opacity: 1, y: 0 }}
           className="mb-5 rounded-2xl border border-neutral-200/90 bg-white p-3 shadow-sm"
         >
@@ -244,7 +250,10 @@ export function VaultContentPanel({
       {currentTab === 'Overview' && (
         <form
           onSubmit={onInlineCapture}
-          className="bg-white border border-neutral-200/90 rounded-xl p-1.5 flex gap-2 items-center mb-6 shadow-sm hover:border-neutral-300 focus-within:border-neutral-950 transition"
+          className={cn(
+            'mb-6 flex items-center gap-2 rounded-xl border border-neutral-200/90 bg-white shadow-sm transition hover:border-neutral-300 focus-within:border-neutral-950',
+            compactMode ? 'p-1' : 'p-1.5'
+          )}
         >
           <Inbox className="w-4 h-4 text-neutral-400 shrink-0 ml-3" />
           <input
@@ -252,7 +261,7 @@ export function VaultContentPanel({
             placeholder="Fast save: paste a YouTube link, social link, research paper, or note..."
             value={inlineInput}
             onChange={(e) => onInlineInputChange(e.target.value)}
-            className="flex-1 bg-transparent border-none text-xs text-neutral-800 placeholder-neutral-400 focus:outline-none py-1.5"
+            className="memora-flat-input min-w-0 flex-1 appearance-none border-0 bg-transparent py-1.5 text-xs text-neutral-800 placeholder-neutral-400 outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0"
           />
           <button
             type="submit"
@@ -278,7 +287,10 @@ export function VaultContentPanel({
         <>
           <form
             onSubmit={onRunLocalAskAI}
-            className="bg-emerald-50/50 border border-emerald-150/70 p-3 rounded-xl mb-6 flex flex-col gap-3 text-left md:flex-row md:items-center"
+            className={cn(
+              'mb-6 flex flex-col gap-3 rounded-xl border border-emerald-150/70 bg-emerald-50/50 text-left md:flex-row md:items-center',
+              compactMode ? 'p-2.5' : 'p-3'
+            )}
           >
             <div className="flex items-center gap-2 md:shrink-0">
               <div className="w-2.5 h-2.5 rounded-full bg-emerald-550 shrink-0 block" />
@@ -292,7 +304,7 @@ export function VaultContentPanel({
                 placeholder='Ask instant questions across these overview items... e.g., "What was the supply chain idea?"'
                 value={localAskQuery}
                 onChange={(e) => onLocalAskQueryChange(e.target.value)}
-                className="min-w-0 flex-1 bg-transparent border-none text-xs text-neutral-800 placeholder-emerald-700/50 focus:outline-none"
+                className="memora-flat-input min-w-0 flex-1 appearance-none border-0 bg-transparent text-xs text-neutral-800 placeholder-emerald-700/50 outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0"
               />
               <button
                 type="submit"
@@ -304,9 +316,9 @@ export function VaultContentPanel({
             </div>
           </form>
 
-          {localAskAnswer && (
+          {localAskResult && (
             <motion.div
-              initial={{ opacity: 0, y: 5 }}
+              initial={reduceMotion ? false : { opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
               className="bg-[#2a2c30] text-neutral-200 outline outline-1 outline-neutral-800 p-5 rounded-xl text-left relative mt-1 mb-6 shadow-xl"
             >
@@ -317,14 +329,49 @@ export function VaultContentPanel({
                 Local brain compilation results:
               </h5>
               <div className="text-xs leading-relaxed text-neutral-300 font-normal">
-                <FormattedMarkdown text={localAskAnswer} />
+                <FormattedMarkdown text={localAskResult.answer} />
               </div>
+              {localAskResult.summaryBlock && (
+                <div className="mt-4 rounded-xl border border-neutral-700 bg-neutral-900/40 p-4">
+                  <div className="mb-2 text-[9px] font-bold uppercase tracking-wider text-neutral-400 font-mono">Detailed synthesis</div>
+                  <div className="text-xs leading-relaxed text-neutral-300">
+                    <FormattedMarkdown text={localAskResult.summaryBlock} />
+                  </div>
+                </div>
+              )}
+              {localAskResult.referencedSources && localAskResult.referencedSources.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-neutral-400 font-mono">Attached references</div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {localAskResult.referencedSources.map((source, index) => (
+                      <button
+                        key={`${source.itemId ?? source.title}-${index}`}
+                        type="button"
+                        onClick={() => onOpenReferencedItem(source)}
+                        className="rounded-xl border border-neutral-700 bg-neutral-900/50 p-3 text-left transition hover:border-neutral-500"
+                      >
+                        <div className="text-[9px] font-bold uppercase tracking-wider text-amber-300 font-mono">{source.source}</div>
+                        <div className="mt-1 text-[11px] font-semibold leading-snug text-neutral-100">{source.title}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {localAskResult.tags && localAskResult.tags.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {localAskResult.tags.map((tag) => (
+                    <span key={tag} className="rounded-full bg-neutral-800 px-2 py-1 text-[9px] font-mono text-neutral-300">
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
         </>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className={cn('grid gap-4', compactMode ? 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2')}>
         {filteredItems.map((item) => {
           const isSelected = selectedItemId === item.id;
 
@@ -332,12 +379,13 @@ export function VaultContentPanel({
             <motion.div
               key={item.id}
               onClick={() => onSelectItem(item.id)}
-              initial={{ opacity: 0, y: 14 }}
+              initial={reduceMotion ? false : { opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-              whileHover={{ y: -3 }}
+              whileHover={reduceMotion ? undefined : { y: -3 }}
               className={cn(
-                'memora-soft-outline relative flex cursor-pointer flex-col justify-between rounded-xl border bg-white p-5 text-left transition-premium group',
+                'memora-soft-outline relative flex cursor-pointer flex-col justify-between rounded-xl border bg-white text-left transition-premium group',
+                compactMode ? 'p-4' : 'p-5',
                 isSelected ? 'ring-1.5 ring-neutral-900 border-transparent shadow shadow-neutral-100' : 'border-neutral-200 hover:border-neutral-300 shadow-sm'
               )}
             >
@@ -408,7 +456,7 @@ export function VaultContentPanel({
               </div>
 
               <div className="space-y-1.5">
-                <h3 className="font-bold text-xs text-neutral-900 leading-snug line-clamp-2">{item.title}</h3>
+                <h3 className={cn('font-bold text-neutral-900 leading-snug line-clamp-2', compactMode ? 'text-[11px]' : 'text-xs')}>{item.title}</h3>
                 <p className="text-neutral-500 text-[11px] leading-relaxed line-clamp-3">{item.summary}</p>
               </div>
 

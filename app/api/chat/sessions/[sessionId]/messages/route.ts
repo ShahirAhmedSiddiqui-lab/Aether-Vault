@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { apiSuccess, handleApiRouteError, unauthorized } from '@/lib/api/errors';
+import { ApiRouteError, apiSuccess, handleApiRouteError, unauthorized } from '@/lib/api/errors';
 import { logApiEvent } from '@/lib/api/logging';
 import { enforceRateLimit } from '@/lib/api/rate-limit';
 import {
@@ -11,6 +11,7 @@ import {
 } from '@/lib/api/validation';
 import { generateVaultChatAnswer } from '@/lib/ai/service';
 import { createClient } from '@/lib/supabase/server';
+import { getOrCreateProfile, normalizeUserPreferences } from '@/lib/supabase/profile';
 import { mapChatMessage, mapKnowledgeItem } from '@/lib/supabase/vault';
 import {
   assertChatSessionOwnership,
@@ -67,23 +68,33 @@ export async function POST(req: NextRequest, context: { params: Promise<{ sessio
     });
     const persist = readOptionalBoolean(body.persist, 'persist') ?? true;
     const normalizedSessionId = readUuid(sessionId, 'Session id');
+    const itemIds = readOptionalItemIds(body.itemIds);
 
     await assertChatSessionOwnership(supabase, user.id, normalizedSessionId);
 
-    const [{ data: existingChats, error: chatError }, { data: itemRows, error: itemError }] = await Promise.all([
-      supabase
-        .from('chat_messages')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('session_id', normalizedSessionId)
-        .order('created_at', { ascending: true }),
-      supabase
-        .from('knowledge_items')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('processing_status', 'ready')
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false }),
+    let itemQuery = supabase
+      .from('knowledge_items')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('processing_status', 'ready')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+
+    if (itemIds.length > 0) {
+      itemQuery = itemQuery.in('id', itemIds);
+    }
+
+    const [{ data: existingChats, error: chatError }, { data: itemRows, error: itemError }, profile] = await Promise.all([
+      persist
+        ? supabase
+            .from('chat_messages')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('session_id', normalizedSessionId)
+            .order('created_at', { ascending: true })
+        : Promise.resolve({ data: [], error: null }),
+      itemQuery,
+      getOrCreateProfile(supabase, user),
     ]);
 
     if (chatError) {
@@ -98,7 +109,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ sessio
       role: chat.role,
       content: chat.content,
     }));
-    const aiResponse = await generateVaultChatAnswer(query, items, formattedHistory);
+    const preferences = normalizeUserPreferences(profile.preferences);
+    const aiResponse = await generateVaultChatAnswer(query, items, formattedHistory, {
+      responseStyle: preferences.brainResponseStyle,
+    });
 
     if (!persist) {
       return apiSuccess(
@@ -171,6 +185,20 @@ export async function POST(req: NextRequest, context: { params: Promise<{ sessio
     });
     return handleApiRouteError(error, 'chat.messages.send');
   }
+}
+
+function readOptionalItemIds(value: unknown) {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new ApiRouteError(400, 'itemIds must be an array of ids.', {
+      code: 'validation_error',
+    });
+  }
+
+  return value.slice(0, 40).map((entry) => readUuid(entry, 'itemIds entry'));
 }
 
 export async function DELETE(_: NextRequest, context: { params: Promise<{ sessionId: string }> }) {

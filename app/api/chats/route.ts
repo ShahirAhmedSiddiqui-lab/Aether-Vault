@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ApiRouteError, apiSuccess, handleApiRouteError, unauthorized } from '@/lib/api/errors';
 import { logApiEvent } from '@/lib/api/logging';
 import { enforceRateLimit } from '@/lib/api/rate-limit';
-import { ensureObject, readJsonBody, readOptionalBoolean, readRequiredString } from '@/lib/api/validation';
+import { ensureObject, readJsonBody, readOptionalBoolean, readRequiredString, readUuid } from '@/lib/api/validation';
 import { generateVaultChatAnswer } from '@/lib/ai/service';
 import { createClient } from '@/lib/supabase/server';
+import { getOrCreateProfile, normalizeUserPreferences } from '@/lib/supabase/profile';
 import { mapChatMessage, mapKnowledgeItem } from '@/lib/supabase/vault';
 import { buildChatSessionTitle, getOrCreateLatestChatSession, touchChatSession } from '@/lib/vault/chat';
 
@@ -63,23 +64,35 @@ export async function POST(req: NextRequest) {
       maxLength: 2_000,
     });
     const persist = readOptionalBoolean(body.persist, 'persist') ?? true;
+    const itemIds = readOptionalItemIds(body.itemIds);
 
-    const session = await getOrCreateLatestChatSession(supabase, user.id);
+    const session = persist
+      ? await getOrCreateLatestChatSession(supabase, user.id)
+      : null;
 
-    const [{ data: existingChats, error: chatError }, { data: itemRows, error: itemError }] = await Promise.all([
-      supabase
-        .from('chat_messages')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('session_id', session.id)
-        .order('created_at', { ascending: true }),
-      supabase
-        .from('knowledge_items')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('processing_status', 'ready')
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false }),
+    let itemQuery = supabase
+      .from('knowledge_items')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('processing_status', 'ready')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+
+    if (itemIds.length > 0) {
+      itemQuery = itemQuery.in('id', itemIds);
+    }
+
+    const [{ data: existingChats, error: chatError }, { data: itemRows, error: itemError }, profile] = await Promise.all([
+      persist && session
+        ? supabase
+            .from('chat_messages')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('session_id', session.id)
+            .order('created_at', { ascending: true })
+        : Promise.resolve({ data: [], error: null }),
+      itemQuery,
+      getOrCreateProfile(supabase, user),
     ]);
 
     if (chatError) {
@@ -94,21 +107,22 @@ export async function POST(req: NextRequest) {
       role: chat.role,
       content: chat.content,
     }));
-    const aiResponse = await generateVaultChatAnswer(query, items, formattedHistory);
+    const preferences = normalizeUserPreferences(profile.preferences);
+    const aiResponse = await generateVaultChatAnswer(query, items, formattedHistory, {
+      responseStyle: preferences.brainResponseStyle,
+    });
 
     if (!persist) {
       return apiSuccess(
         {
           userMessage: {
             id: `preview-user-${Date.now()}`,
-            sessionId: session.id,
             role: 'user',
             content: query,
             createdAt: 'Just now',
           },
           modelMessage: {
             id: `preview-model-${Date.now()}`,
-            sessionId: session.id,
             role: 'model',
             content: aiResponse.answer,
             summaryBlock: aiResponse.summaryBlock,
@@ -119,6 +133,10 @@ export async function POST(req: NextRequest) {
         },
         { status: 201 }
       );
+    }
+
+    if (!session) {
+      throw new Error('Chat session was not initialized.');
     }
 
     const lastMessageAt = new Date().toISOString();
@@ -167,6 +185,20 @@ export async function POST(req: NextRequest) {
     });
     return handleApiRouteError(error, 'chat.legacy.send');
   }
+}
+
+function readOptionalItemIds(value: unknown) {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new ApiRouteError(400, 'itemIds must be an array of ids.', {
+      code: 'validation_error',
+    });
+  }
+
+  return value.slice(0, 40).map((entry) => readUuid(entry, 'itemIds entry'));
 }
 
 export async function DELETE() {

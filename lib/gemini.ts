@@ -210,7 +210,8 @@ ${fileContext}`;
 export async function askSecondBrain(
   query: string,
   items: KnowledgeItem[],
-  chatHistory: { role: 'user' | 'model'; content: string }[]
+  chatHistory: { role: 'user' | 'model'; content: string }[],
+  responseStyle: 'concise' | 'balanced' | 'detailed' = 'balanced'
 ): Promise<{
   answer: string;
   summaryBlock?: string;
@@ -226,19 +227,30 @@ export async function askSecondBrain(
     return buildFallbackChat(query, items);
   }
 
-  // Format context items for prompt
-  const itemsContext = items.map(item => {
+  const itemsContext = items.map((item) => {
     return `[ID: ${item.id}] [Title: ${item.title}] [Type: ${item.type}] [Source: ${item.source}] [Tags: ${item.tags.join(', ')}]
-Content: ${item.content}
 Summary: ${item.summary}
+Primary content:
+${item.content}
+Extracted text:
+${item.extractedText || 'No extracted text available.'}
 ---`;
   }).join('\n\n');
 
-  const historyContext = chatHistory.map(h => `${h.role === 'user' ? 'User' : 'Memora'}: ${h.content}`).join('\n');
+  const historyContext = chatHistory.map((h) => `${h.role === 'user' ? 'User' : 'Memora'}: ${h.content}`).join('\n');
+  const responseStyleInstruction =
+    responseStyle === 'concise'
+      ? 'Keep both the opening answer and summary block tight, skimmable, and short.'
+      : responseStyle === 'detailed'
+        ? 'Be comprehensive. Include more nuance, structured detail, and fuller explanations while staying grounded in the saved items.'
+        : 'Keep a balanced level of detail: clear, structured, and useful without becoming overly long.';
 
   const prompt = `You are the chat interface of Memora, the user's AI Second Brain.
 The user is asking a question about their saved knowledge items.
+Understand informal wording, slang, shorthand, typos, and imperfect grammar naturally.
 Answer their request objectively, conversationally, and accurately based ONLY on their saved digital mind.
+Use the full vault evidence provided here, not just titles or short summaries.
+${responseStyleInstruction}
 
 Here is the current state of their saved mind (use this as your source of truth):
 ${itemsContext}
@@ -259,7 +271,7 @@ Return a response in JSON containing:
       contents: prompt,
       config: {
         systemInstruction:
-          'You are the cognitive heart of Memora. You find connections, answer questions on saved articles/videos/social links/notes, and synthesize insights seamlessly. Always respond structured as JSON.',
+          'You are the cognitive heart of Memora. You find connections, answer questions on saved articles, videos, social links, notes, PDFs, images, and voice notes using only the vault evidence provided. Always respond as structured JSON.',
         temperature: 0.3,
         responseMimeType: 'application/json',
         responseSchema: {
@@ -297,6 +309,85 @@ Return a response in JSON containing:
   } catch (error) {
     logGeminiFallback('Gemini chat lookup failed, falling back to keyword heuristic.', error);
     return buildFallbackChat(query, items);
+  }
+}
+
+export async function answerFromGeneralKnowledge(
+  query: string,
+  responseStyle: 'concise' | 'balanced' | 'detailed' = 'balanced'
+): Promise<{
+  answer: string;
+  summaryBlock?: string;
+  tags?: string[];
+}> {
+  const ai = getAiClient();
+
+  if (!ai) {
+    return buildGeneralFallback(query);
+  }
+
+  const responseStyleInstruction =
+    responseStyle === 'concise'
+      ? 'Keep the answer short and crisp.'
+      : responseStyle === 'detailed'
+        ? 'Be detailed and well-structured.'
+        : 'Keep the answer balanced and practical.';
+
+  const prompt = `You are Memora's assistant.
+The vault does not contain a reliable match for the user's request, so you may answer from general knowledge.
+You must clearly tell the user that no relevant vault source was found and that the answer is based on general reasoning or assumptions instead of saved references.
+Understand casual phrasing, slang, incomplete grammar, and free-form chat naturally.
+${responseStyleInstruction}
+
+User question: "${query}"
+
+Return JSON with:
+1. "answer": a natural conversational answer that starts by disclosing the vault mismatch.
+2. "summaryBlock": a clearer structured explanation of the topic, assumptions, and practical guidance.
+3. "tags": up to 3 short tags.`;
+
+  try {
+    const response = await generateContentWithRetry(ai, {
+      contents: prompt,
+      config: {
+        systemInstruction:
+          'You are a clear and honest assistant. Disclose when an answer is not grounded in the vault and avoid pretending to cite unavailable saved sources.',
+        temperature: 0.4,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          required: ['answer', 'summaryBlock', 'tags'],
+          properties: {
+            answer: { type: Type.STRING },
+            summaryBlock: { type: Type.STRING },
+            tags: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+            },
+          },
+        },
+      },
+    });
+
+    const text = response.text;
+    if (!text) {
+      throw new Error('Empty response from model');
+    }
+
+    const data = JSON.parse(text.trim()) as {
+      answer?: string;
+      summaryBlock?: string;
+      tags?: string[];
+    };
+
+    return {
+      answer: data.answer?.trim() || buildGeneralFallback(query).answer,
+      summaryBlock: data.summaryBlock?.trim() || buildGeneralFallback(query).summaryBlock,
+      tags: (data.tags ?? []).map((tag) => tag.trim()).filter(Boolean).slice(0, 3),
+    };
+  } catch (error) {
+    logGeminiFallback('Gemini general fallback generation failed. Using heuristic general fallback instead.', error);
+    return buildGeneralFallback(query);
   }
 }
 
@@ -369,7 +460,8 @@ function buildFallbackChat(query: string, items: KnowledgeItem[]) {
       (item) =>
         item.title.toLowerCase().includes(qLower) ||
         item.content.toLowerCase().includes(qLower) ||
-        item.summary.toLowerCase().includes(qLower)
+        item.summary.toLowerCase().includes(qLower) ||
+        (item.extractedText?.toLowerCase().includes(qLower) ?? false)
     ) || items[0];
 
   return {
@@ -393,6 +485,16 @@ function buildEmptyVaultChatResponse() {
       'Save or finish processing an article, video, PDF, social link, or voice note first, then ask again for a grounded answer.',
     referencedSources: [],
     tags: ['No Results', 'Empty Vault'],
+  };
+}
+
+function buildGeneralFallback(query: string) {
+  return {
+    answer:
+      `I couldn't find anything clearly related to "${query.trim()}" in your vault, so this answer is based on general reasoning rather than saved sources.`,
+    summaryBlock:
+      'No direct vault match was available for this topic. I am giving a general best-effort explanation based on the request itself, so treat it as an assumption-based answer rather than a citation-backed vault recall.',
+    tags: ['No Vault Match', 'General Reasoning', 'Assumption Based'],
   };
 }
 

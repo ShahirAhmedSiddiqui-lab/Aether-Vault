@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { VaultWorkspace } from './_components/vault-workspace';
 import { getProfileWithAvatarUrl } from '@/lib/supabase/profile';
 import { getSafeUser } from '@/lib/supabase/auth';
+import { attachSignedUrls } from '@/lib/supabase/vault';
+import { listChatSessions } from '@/lib/vault/chat';
 
 export default async function VaultPage() {
   const supabase = await createClient();
@@ -12,13 +14,27 @@ export default async function VaultPage() {
     redirect('/login?message=Please%20log%20in%20to%20access%20your%20vault.');
   }
 
-  const profile = await getProfileWithAvatarUrl(supabase, user);
+  const [profile, sessions, itemQuery] = await Promise.all([
+    getProfileWithAvatarUrl(supabase, user),
+    listChatSessions(supabase, user.id),
+    supabase
+      .from('knowledge_items')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false }),
+  ]);
+
+  if (itemQuery.error) {
+    throw itemQuery.error;
+  }
+
+  const initialItems = await attachSignedUrls(supabase, itemQuery.data ?? []);
   const identity = {
     fullName: profile.fullName || user?.email?.split('@')[0] || 'Vault User',
     email: profile.email || user?.email || '',
     avatarUrl: profile.avatarUrl,
-    defaultVoiceSpeed: profile.preferences.defaultVoiceSpeed,
+    preferences: profile.preferences,
   };
 
-  return <VaultWorkspace identity={identity} />;
+  return <VaultWorkspace identity={identity} initialItems={initialItems} initialChatSessions={sessions} />;
 }

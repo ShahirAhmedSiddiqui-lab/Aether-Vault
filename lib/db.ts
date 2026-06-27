@@ -96,6 +96,13 @@ export interface ChatMessage {
   createdAt: string;
 }
 
+export interface ChatPreviewResult {
+  answer: string;
+  summaryBlock?: string;
+  referencedSources?: ChatReferencedSource[];
+  tags?: string[];
+}
+
 export function formatRelativeDate(isoString: string): string {
   const now = Date.now();
   const timestamp = new Date(isoString).getTime();

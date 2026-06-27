@@ -12,6 +12,7 @@ type VaultDetailPanelProps = {
   currentItem?: KnowledgeItem;
   isTrashView: boolean;
   isFullscreen: boolean;
+  reduceMotion: boolean;
   flippedCardId: string | null;
   voiceSpeed: number;
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -30,6 +31,7 @@ export function VaultDetailPanel({
   currentItem,
   isTrashView,
   isFullscreen,
+  reduceMotion,
   flippedCardId,
   voiceSpeed,
   audioRef,
@@ -51,7 +53,7 @@ export function VaultDetailPanel({
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: 18 }}
+      initial={reduceMotion ? false : { opacity: 0, x: 18 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
       className={cn(
@@ -429,7 +431,7 @@ export function VaultDetailPanel({
                   <motion.div
                     key={fc.id}
                     onClick={() => onFlipCard(isFlipped ? null : fc.id)}
-                    whileHover={{ y: -2 }}
+                    whileHover={reduceMotion ? undefined : { y: -2 }}
                     className="bg-neutral-50 border border-neutral-200/80 hover:bg-[#fafafc] rounded-xl p-3.5 cursor-pointer transition-premium text-left min-h-[90px] flex flex-col justify-between"
                   >
                     <div className="flex justify-between items-center text-[9px] font-bold tracking-wider font-mono text-neutral-400 uppercase mb-2">
@@ -438,7 +440,7 @@ export function VaultDetailPanel({
                     </div>
 
                     {isFlipped ? (
-                      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-neutral-700 text-xs leading-normal font-normal font-mono text-left">
+                      <motion.p initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} className="text-neutral-700 text-xs leading-normal font-normal font-mono text-left">
                         {fc.answer}
                       </motion.p>
                     ) : (
