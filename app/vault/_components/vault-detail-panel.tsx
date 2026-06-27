@@ -217,53 +217,91 @@ export function VaultDetailPanel({
             </div>
           )}
 
-          {currentItem.type === 'Videos' && (
-            <div className="space-y-2">
-              {currentItem.url ? (
-                <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
-                  <div className="relative aspect-video w-full bg-neutral-100">
-                    {currentItem.previewMetadata?.thumbnailUrl ? (
-                      <img
-                        src={currentItem.previewMetadata.thumbnailUrl}
-                        alt={currentItem.title}
-                        className="h-full w-full object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-neutral-950 text-white">
-                        <Play className="h-8 w-8" />
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/10 to-transparent" />
-                    <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 text-white">
-                      <div className="min-w-0">
-                        <div className="truncate text-[10px] font-bold font-mono uppercase tracking-widest text-white/80">
-                          {currentItem.source}
-                        </div>
-                        <div className="truncate text-xs font-semibold">
-                          {currentItem.author || 'Video source preview'}
-                        </div>
-                      </div>
-                      <a
-                        href={currentItem.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/40 bg-white/15 px-3 py-1.5 text-[10px] font-bold font-mono text-white backdrop-blur-sm transition hover:bg-white/25"
-                      >
-                        <span>Open video</span>
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-4 bg-white border border-neutral-200 rounded-lg text-center font-mono space-y-1.5">
-                  <Play className="w-5 h-5 mx-auto text-neutral-400" />
-                  <span className="text-[10px] text-neutral-600 block font-semibold">Video Link Bookmark</span>
-                </div>
-              )}
-            </div>
-          )}
+         {currentItem.type === 'Videos' && (
+  <div className="space-y-2">
+    {currentItem.url ? (
+      <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
+        <div className="relative aspect-video w-full bg-neutral-100">
+          {(() => {
+            let youtubeVideoId: string | null = null
+
+            try {
+              const parsedUrl = new URL(currentItem.url)
+
+              if (parsedUrl.hostname.includes('youtu.be')) {
+                youtubeVideoId =
+                  parsedUrl.pathname.split('/').filter(Boolean)[0] ?? null
+              }
+
+              if (parsedUrl.hostname.includes('youtube.com')) {
+                if (parsedUrl.pathname === '/watch') {
+                  youtubeVideoId = parsedUrl.searchParams.get('v')
+                }
+
+                if (parsedUrl.pathname.startsWith('/shorts/')) {
+                  youtubeVideoId =
+                    parsedUrl.pathname.split('/').filter(Boolean)[1] ?? null
+                }
+
+                if (parsedUrl.pathname.startsWith('/embed/')) {
+                  youtubeVideoId =
+                    parsedUrl.pathname.split('/').filter(Boolean)[1] ?? null
+                }
+              }
+            } catch {
+              youtubeVideoId = null
+            }
+
+            const youtubeEmbedUrl = youtubeVideoId
+              ? `https://www.youtube-nocookie.com/embed/${youtubeVideoId}`
+              : null
+
+            if (youtubeEmbedUrl) {
+              return (
+                <iframe
+                  src={youtubeEmbedUrl}
+                  title={currentItem.title || 'YouTube video preview'}
+                  className="h-full w-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                  referrerPolicy="strict-origin-when-cross-origin"
+                />
+              )
+            }
+
+            if (currentItem.previewMetadata?.thumbnailUrl) {
+              return (
+                <img
+                  src={currentItem.previewMetadata.thumbnailUrl}
+                  alt={currentItem.title}
+                  className="h-full w-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              )
+            }
+
+            return (
+              <div className="flex h-full w-full items-center justify-center bg-neutral-950 text-white">
+                <Play className="h-8 w-8" />
+              </div>
+            )
+          })()}
+        </div>
+      </div>
+    ) : null}
+
+    {currentItem.url && (
+      <a
+        href={currentItem.url}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex text-sm font-medium text-neutral-700 underline underline-offset-4 hover:text-neutral-950"
+      >
+        Open video
+      </a>
+    )}
+  </div>
+)}
 
           {currentItem.type === 'PDFs' && (
             <div className="space-y-2">
