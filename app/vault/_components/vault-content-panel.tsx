@@ -3,10 +3,11 @@
 /* eslint-disable @next/next/no-img-element */
 
 import * as React from 'react';
+import Fuse from 'fuse.js';
+import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { motion } from 'motion/react';
 import { Activity, ArrowRight, Bookmark, ChevronDown, Inbox, LoaderCircle, RefreshCw, RotateCcw, Trash2, X } from 'lucide-react';
 import { ChatPreviewResult, ChatReferencedSource, KnowledgeItem } from '@/lib/db';
-import { matchesSearch } from '@/lib/supabase/vault';
 import { cn } from '@/lib/utils';
 import { FormattedMarkdown } from './formatted-markdown';
 
@@ -14,6 +15,7 @@ type VaultContentPanelProps = {
   currentTab: 'Overview' | 'Bookmarks' | 'Trash' | 'Articles' | 'Videos' | 'PDFs' | 'Social Links' | 'Voice Notes' | 'Images';
   items: KnowledgeItem[];
   isTrashView: boolean;
+  isMobile: boolean;
   searchQuery: string;
   filterReferenceTime: number;
   typeFilter: 'All' | KnowledgeItem['type'];
@@ -48,6 +50,7 @@ export function VaultContentPanel({
   currentTab,
   items,
   isTrashView,
+  isMobile,
   searchQuery,
   filterReferenceTime,
   typeFilter,
@@ -78,6 +81,7 @@ export function VaultContentPanel({
   onRetryItem,
 }: VaultContentPanelProps) {
   const [isFiltersOpen, setIsFiltersOpen] = React.useState(false);
+  const [listAutoAnimateRef] = useAutoAnimate<HTMLDivElement>();
   const itemTabs: KnowledgeItem['type'][] = ['Articles', 'Videos', 'PDFs', 'Images', 'Social Links', 'Voice Notes'];
   const effectiveTypeFilter = itemTabs.includes(currentTab as KnowledgeItem['type'])
     ? (currentTab as KnowledgeItem['type'])
@@ -88,7 +92,7 @@ export function VaultContentPanel({
 
   const filteredItems = React.useMemo(
     () => {
-      return items.filter((item) => {
+      const baseItems = items.filter((item) => {
         const matchesTab =
           currentTab === 'Overview'
             ? !item.deletedAt
@@ -115,9 +119,30 @@ export function VaultContentPanel({
                 : recencyFilter === '30d'
                   ? itemAgeMs <= 30 * 24 * 60 * 60 * 1000
                   : itemAgeMs <= 90 * 24 * 60 * 60 * 1000;
-        const matchesQuery = !searchQuery.trim() || matchesSearch(item, searchQuery);
-        return matchesTab && matchesType && matchesBookmark && matchesRecency && matchesQuery;
+        return matchesTab && matchesType && matchesBookmark && matchesRecency;
       });
+
+      const normalizedQuery = searchQuery.trim();
+      if (!normalizedQuery) {
+        return baseItems;
+      }
+
+      const fuse = new Fuse(baseItems, {
+        threshold: 0.34,
+        ignoreLocation: true,
+        minMatchCharLength: 2,
+        keys: [
+          { name: 'title', weight: 0.35 },
+          { name: 'summary', weight: 0.24 },
+          { name: 'content', weight: 0.18 },
+          { name: 'extractedText', weight: 0.14 },
+          { name: 'source', weight: 0.08 },
+          { name: 'author', weight: 0.04 },
+          { name: 'tags', weight: 0.16 },
+        ],
+      });
+
+      return fuse.search(normalizedQuery).map((result) => result.item);
     },
     [currentTab, effectiveBookmarkFilter, effectiveTypeFilter, filterReferenceTime, items, recencyFilter, searchQuery]
   );
@@ -165,7 +190,13 @@ export function VaultContentPanel({
   }, [items]);
 
   return (
-    <div className={cn('app-scrollbar flex flex-1 flex-col overflow-y-auto border-r border-neutral-200/80 bg-[#fafafc]', compactMode ? 'px-4 py-4' : 'px-6 py-6')}>
+    <div
+      className={cn(
+        'app-scrollbar flex flex-1 flex-col overflow-y-auto bg-[#fafafc]',
+        isMobile ? 'border-r-0 px-4 py-4' : 'border-r border-neutral-200/80',
+        !isMobile && (compactMode ? 'px-4 py-4' : 'px-6 py-6')
+      )}
+    >
       <div className={cn('flex items-center justify-between', compactMode ? 'mb-4' : 'mb-6')}>
         <div>
           <h2 className="text-base font-bold tracking-tight text-neutral-900">
@@ -285,7 +316,7 @@ export function VaultContentPanel({
         </form>
       )}
 
-      {currentTab === 'Overview' && (
+      {currentTab === 'Overview' && !isMobile && (
         <>
           <form
             onSubmit={onRunLocalAskAI}
@@ -373,7 +404,13 @@ export function VaultContentPanel({
         </>
       )}
 
-      <div className={cn('grid gap-4', compactMode ? 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2')}>
+      <div
+        ref={listAutoAnimateRef}
+        className={cn(
+          'grid gap-4',
+          isMobile ? 'grid-cols-1' : compactMode ? 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'
+        )}
+      >
         {filteredItems.map((item) => {
           const isSelected = selectedItemId === item.id;
 
@@ -521,7 +558,7 @@ export function VaultContentPanel({
         )}
       </div>
 
-      {currentTab === 'Overview' && (
+      {currentTab === 'Overview' && !isMobile && (
         <div className="mt-10 pt-6 border-t border-[#e2e2ec] text-left select-none">
           <div className="flex items-center space-x-2 text-neutral-400 uppercase text-[10px] tracking-widest font-mono font-bold mb-4">
             <Activity className="w-4 h-4 text-neutral-900" />

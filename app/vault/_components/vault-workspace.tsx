@@ -1,12 +1,12 @@
 'use client';
 
 import * as React from 'react';
+import { toast } from 'sonner';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   AlertTriangle,
   BookOpen,
   Bot,
-  CheckCircle,
   FileText,
   Globe,
   ImageIcon,
@@ -252,11 +252,12 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
   const [localAskLoading, setLocalAskLoading] = React.useState(false);
   const [flippedCardId, setFlippedCardId] = React.useState<string | null>(null);
   const [isSendingChat, setIsSendingChat] = React.useState(false);
-  const [notification, setNotification] = React.useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = React.useState<ConfirmDialogState | null>(null);
   const [filterReferenceTime] = React.useState(() => Date.now());
   const [isDetailPanelOpen, setIsDetailPanelOpen] = React.useState(true);
   const [isDetailFullscreen, setIsDetailFullscreen] = React.useState(false);
+  const [isMobileViewport, setIsMobileViewport] = React.useState(false);
+  const [mobileWorkspaceView, setMobileWorkspaceView] = React.useState<'library' | 'detail'>('library');
 
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
   const mediaStreamRef = React.useRef<MediaStream | null>(null);
@@ -299,6 +300,25 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
         .find((chat) => chat.role === 'model' && (chat.referencedSources?.length ?? 0) > 0)?.referencedSources ?? [],
     [chats]
   );
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(max-width: 1023px)');
+    const handleViewportChange = (event: MediaQueryList | MediaQueryListEvent) => {
+      const matches = 'matches' in event ? event.matches : mediaQuery.matches;
+      setIsMobileViewport(matches);
+    };
+
+    handleViewportChange(mediaQuery);
+    mediaQuery.addEventListener('change', handleViewportChange);
+
+    return () => {
+      mediaQuery.removeEventListener('change', handleViewportChange);
+    };
+  }, []);
 
   React.useEffect(() => {
     if (isRecording) {
@@ -361,8 +381,7 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
   }, []);
 
   const showToast = React.useCallback((message: string) => {
-    setNotification(message);
-    setTimeout(() => setNotification(null), 3000);
+    toast.success(message);
   }, []);
 
   const requestConfirmation = React.useCallback((options: ConfirmDialogState) => {
@@ -1281,27 +1300,18 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
     { name: 'Trash', icon: RotateCcw },
   ];
 
+  const shouldShowMobileWorkspaceToggle = isMobileViewport && currentTab !== 'Chat' && currentTab !== 'Guide';
+  const showMobileLibraryView = !shouldShowMobileWorkspaceToggle || mobileWorkspaceView === 'library' || !currentItem;
+  const showMobileDetailView = shouldShowMobileWorkspaceToggle && mobileWorkspaceView === 'detail' && !!currentItem;
+  const showDesktopInlineDetail = !isMobileViewport && isDetailPanelOpen && !isDetailFullscreen;
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.35, ease: 'easeOut' }}
-      className="h-screen overflow-hidden bg-[#fafafc] text-neutral-800 font-sans relative antialiased flex flex-row"
+      className="relative flex min-h-screen flex-col bg-[#fafafc] font-sans text-neutral-800 antialiased lg:h-screen lg:flex-row lg:overflow-hidden"
     >
-      <AnimatePresence>
-        {notification && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 15 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 15 }}
-            className="fixed bottom-6 right-6 z-50 bg-neutral-900 text-white px-4 py-3 rounded-xl text-xs font-medium shadow-xl flex items-center space-x-2.5 border border-neutral-800/50"
-          >
-            <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>{notification}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {isSidebarOpen && (
         <div className="fixed inset-0 bg-neutral-900/10 backdrop-blur-3xs z-30 md:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
@@ -1356,7 +1366,10 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
                 return (
                   <button
                     key={cat.name}
-                    onClick={() => setCurrentTab(cat.name as VaultTab)}
+                    onClick={() => {
+                      setCurrentTab(cat.name as VaultTab);
+                      setMobileWorkspaceView('library');
+                    }}
                     className={cn(
                       'w-full px-3 py-2.5 rounded-xl flex items-center space-x-3 text-left transition-premium',
                       isSelected ? 'bg-neutral-100 text-neutral-950 font-semibold' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
@@ -1388,7 +1401,10 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
 
         <div className="mt-auto space-y-3 border-t border-[#e5e5eb] bg-white p-4">
           <button
-            onClick={() => setCurrentTab('Guide')}
+            onClick={() => {
+              setCurrentTab('Guide');
+              setMobileWorkspaceView('library');
+            }}
             className={cn(
               'w-full px-3 py-2 text-xs font-medium rounded-lg transition text-left',
               currentTab === 'Guide' ? 'bg-neutral-100 text-neutral-950 font-bold' : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900'
@@ -1427,12 +1443,12 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
         </div>
       </motion.aside>
 
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <motion.header
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1], delay: 0.05 }}
-          className="bg-white border-b border-[#e5e5eb] h-14 shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 z-10 select-none"
+          className="z-10 flex h-auto shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#e5e5eb] bg-white px-4 py-3 select-none sm:px-6 lg:h-14 lg:flex-nowrap lg:py-0"
         >
           <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
             <button
@@ -1465,7 +1481,7 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
               <span>{currentSectionLabel}</span>
             </div>
 
-            <div className="relative flex-1 min-w-[180px] max-w-[720px]">
+            <div className="relative flex-1 min-w-[120px] max-w-[720px]">
               <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -1482,7 +1498,7 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
             </div>
           </div>
 
-          <div className="flex items-center space-x-2 md:space-x-4 shrink-0">
+          <div className="flex shrink-0 items-center space-x-2 md:space-x-4">
             <button onClick={() => setShowCaptureModal(true)} className="sm:hidden bg-neutral-900 text-white p-1.5 rounded-lg flex items-center" title="Add knowledge element">
               <Plus className="w-4 h-4" />
             </button>
@@ -1492,21 +1508,50 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
                 openChatTab();
                 void handleChatSubmit(undefined, 'Synthesize a core summary breakdown of my saved knowledge assets.');
               }}
-              className="px-3.5 py-1.5 text-[10px] font-bold font-mono uppercase tracking-wider bg-neutral-950 hover:bg-neutral-800 text-white rounded-lg flex items-center transition-premium shadow-xs"
+              className="hidden rounded-lg bg-neutral-950 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-xs transition-premium hover:bg-neutral-800 sm:flex sm:items-center"
             >
               <span>Auto-Synthesize</span>
             </button>
 
             <button
               onClick={handleLogout}
-              className="px-3 py-1.5 text-[10px] font-bold font-mono uppercase tracking-wider border border-neutral-200 hover:border-neutral-900 text-neutral-700 rounded-lg transition-premium"
+              className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-neutral-700 transition-premium hover:border-neutral-900"
             >
               Log Out
             </button>
           </div>
         </motion.header>
 
-        <div className="flex-1 flex overflow-hidden relative">
+        {shouldShowMobileWorkspaceToggle && (
+          <div className="border-b border-neutral-200 bg-white px-4 py-3 lg:hidden">
+            <div className="flex items-center gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-1">
+              <button
+                type="button"
+                onClick={() => setMobileWorkspaceView('library')}
+                className={cn(
+                  'flex-1 rounded-xl px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] transition',
+                  mobileWorkspaceView === 'library' || !currentItem ? 'bg-neutral-900 text-white' : 'text-neutral-600'
+                )}
+              >
+                Library
+              </button>
+              <button
+                type="button"
+                onClick={() => currentItem && setMobileWorkspaceView('detail')}
+                disabled={!currentItem}
+                className={cn(
+                  'flex-1 rounded-xl px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] transition',
+                  mobileWorkspaceView === 'detail' && currentItem ? 'bg-neutral-900 text-white' : 'text-neutral-600',
+                  !currentItem && 'cursor-not-allowed opacity-45'
+                )}
+              >
+                Details
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="relative flex flex-1 overflow-hidden">
           {currentTab === 'Guide' && (
             <motion.div
               initial={{ opacity: 0, y: 18 }}
@@ -1545,7 +1590,10 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
 
               <div className="pt-6 border-t border-neutral-200">
                 <button
-                  onClick={() => setCurrentTab('Overview')}
+                  onClick={() => {
+                    setCurrentTab('Overview');
+                    setMobileWorkspaceView('library');
+                  }}
                   className="bg-neutral-900 text-white text-xs px-6 py-2.5 rounded-lg font-semibold hover:bg-neutral-800 transition shadow"
                 >
                   Enter Workspace
@@ -1559,14 +1607,15 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              className="flex-1 flex flex-col lg:flex-row overflow-hidden w-full"
+              className="flex w-full flex-1 flex-col overflow-hidden lg:flex-row"
             >
-              {!isDetailFullscreen && (
+              {showMobileLibraryView && !isDetailFullscreen && (
                 <VaultContentPanel
                   key={currentTab}
                   currentTab={currentTab}
                   items={items}
                   isTrashView={currentTab === 'Trash'}
+                  isMobile={isMobileViewport}
                   searchQuery={searchQuery}
                   filterReferenceTime={filterReferenceTime}
                   typeFilter={typeFilter}
@@ -1594,6 +1643,9 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
                     setFlippedCardId(null);
                     setIsDetailPanelOpen(true);
                     setIsDetailFullscreen(false);
+                    if (isMobileViewport) {
+                      setMobileWorkspaceView('detail');
+                    }
                   }}
                   onToggleBookmark={handleToggleBookmark}
                   onDeleteItem={handleDeleteItem}
@@ -1603,7 +1655,7 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
                 />
               )}
 
-              {isDetailPanelOpen && !isDetailFullscreen && (
+              {showDesktopInlineDetail && (
                 <VaultDetailPanel
                   key={currentItem?.id ?? 'detail-panel'}
                   currentItem={currentItem}
@@ -1627,6 +1679,47 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
                   onToggleFullscreen={() => setIsDetailFullscreen((prev) => !prev)}
                 />
               )}
+
+              {showMobileDetailView && (
+                <div className="flex flex-1 flex-col overflow-y-auto bg-white lg:hidden">
+                  <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-neutral-400">Selected Item</div>
+                      <div className="truncate text-sm font-semibold text-neutral-900">{currentItem?.title ?? 'Knowledge detail'}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setMobileWorkspaceView('library')}
+                      className="rounded-lg border border-neutral-200 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-700 transition hover:border-neutral-900 hover:text-neutral-950"
+                    >
+                      Back
+                    </button>
+                  </div>
+
+                  <VaultDetailPanel
+                    key={`mobile-${currentItem?.id ?? 'detail-panel'}`}
+                    currentItem={currentItem}
+                    isTrashView={currentTab === 'Trash'}
+                    isFullscreen
+                    reduceMotion={reduceMotion}
+                    flippedCardId={flippedCardId}
+                    voiceSpeed={voiceSpeed}
+                    audioRef={audioRef}
+                    onSetVoiceSpeed={setVoiceSpeed}
+                    onFlipCard={setFlippedCardId}
+                    onToggleBookmark={handleToggleBookmark}
+                    onDeleteItem={handleDeleteItem}
+                    onRestoreItem={handleRestoreItem}
+                    onPermanentDeleteItem={handlePermanentDeleteItem}
+                    onRetryItem={handleRetryItem}
+                    onClose={() => {
+                      setIsDetailPanelOpen(false);
+                      setMobileWorkspaceView('library');
+                    }}
+                    onToggleFullscreen={() => setIsDetailFullscreen(true)}
+                  />
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -1635,10 +1728,10 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              className="flex-1 flex flex-col lg:flex-row overflow-hidden select-none"
+              className="flex flex-1 flex-col overflow-hidden select-none lg:flex-row"
             >
               <div className="flex-1 flex flex-col h-full overflow-hidden bg-neutral-50/50">
-                <div className="bg-white border-b border-neutral-200 py-3.5 px-6 flex justify-between items-center shrink-0">
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 py-3.5 sm:px-6">
                   <div className="flex items-center space-x-2">
                     <span className="w-2 h-2 bg-emerald-550 rounded-full" />
                     <span className="text-xs font-bold text-neutral-800 font-mono uppercase tracking-widest">Memora Neural Chat</span>
@@ -1660,7 +1753,7 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
                   </div>
                 </div>
 
-                <div ref={chatScrollContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div ref={chatScrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-6 sm:p-6">
                   {chats.length === 0 ? (
                     <div className="max-w-md mx-auto text-center mt-12 py-10 px-6">
                       <Bot className="w-10 h-10 text-neutral-900 mx-auto mb-4" />
@@ -1780,7 +1873,7 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
                 </div>
               </div>
 
-              <div className="w-full lg:w-72 bg-white border-t lg:border-t-0 lg:border-l border-neutral-200 p-6 flex flex-col justify-between shrink-0 overflow-y-auto text-left">
+              <div className="hidden w-full shrink-0 overflow-y-auto border-t border-neutral-200 bg-white p-4 text-left lg:flex lg:w-72 lg:flex-col lg:justify-between lg:border-l lg:border-t-0 lg:p-6">
                 <div className="space-y-6">
                   <div>
                     <div className="mb-3 flex items-center justify-between gap-3">
