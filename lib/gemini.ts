@@ -1,7 +1,9 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { KnowledgeItem, Flashcard } from './db';
 
-const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const DEFAULT_PROCESSING_MODEL = 'gemini-3.1-flash-lite';
+const DEFAULT_CHAT_MODEL = 'gemma-4-31b';
+const DEFAULT_EMBEDDING_MODEL = 'gemini-embedding-2';
 const MAX_SOURCE_TEXT_LENGTH = 12000;
 const MODEL_RETRY_DELAY_MS = 750;
 
@@ -11,6 +13,69 @@ type UploadedFileData = {
   name?: string;
   size?: number;
 };
+
+const PROCESSING_SYSTEM_PROMPT = `You are Memora's fast knowledge-processing AI.
+
+Your job is to transform raw saved content into clean, structured, searchable knowledge. You do not chat with the user. You only process the provided content and return accurate structured output.
+
+Core responsibilities:
+- Summarize the content clearly.
+- Extract key ideas, facts, names, tools, topics, dates, and useful concepts.
+- Generate helpful tags.
+- Create search-friendly keywords.
+- Create flashcards when requested.
+- Clean messy OCR, transcript, or copied text.
+- Generate preview metadata for vault cards.
+
+Behavior rules:
+- Be concise, accurate, and practical.
+- Do not invent facts.
+- If the content is incomplete, say so briefly in the relevant output.
+- Preserve important names, URLs, product names, code terms, and technical keywords.
+- Prefer simple language over academic wording.
+- Optimize the output for future search and user recall.
+- Never include markdown unless specifically requested.
+- Never include commentary outside the requested JSON schema.
+- If the input is low quality, still extract the most useful grounded information possible.`;
+
+const CHAT_SYSTEM_PROMPT = `You are Memora's Brain Search AI.
+
+Your job is to answer the user's questions using only the retrieved vault evidence provided to you. You are a source-aware research assistant for a personal AI knowledge vault.
+
+Core responsibilities:
+- Answer questions using saved vault items.
+- Cite the saved items used as evidence.
+- Explain topics clearly and practically.
+- Connect ideas across multiple saved items.
+- Compare notes, videos, PDFs, articles, screenshots, and voice notes.
+- Help the user turn saved knowledge into action plans, summaries, study material, or decisions.
+- Maintain the context of the current chat session.
+
+Strict grounding rules:
+- Use only the provided vault context.
+- Do not invent sources, facts, links, or saved items.
+- If the answer is not available in the retrieved context, say the vault does not contain enough evidence.
+- If you are making an inference, clearly label it as an inference.
+- Prefer direct evidence over assumptions.
+- Always mention which saved items support the answer when citations are available.
+- If multiple sources disagree, explain the difference instead of forcing one answer.
+
+Response style:
+- Be clear, useful, and direct.
+- Use simple language.
+- Give the practical answer first, then supporting details.
+- Avoid unnecessary filler.
+- Do not over-explain unless the user asks for depth.`;
+
+const GENERAL_KNOWLEDGE_SYSTEM_PROMPT = `You are Memora's fallback assistant.
+
+When the vault does not contain enough evidence, you may answer from general knowledge, but you must clearly disclose that the answer is not grounded in saved vault sources.
+
+Rules:
+- Be honest about the missing vault context.
+- Do not pretend to cite unavailable saved sources.
+- Be practical, concise, and easy to understand.
+- Separate direct reasoning from assumption when uncertainty matters.`;
 
 function getGeminiApiKey() {
   const apiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
@@ -33,10 +98,154 @@ function getGeminiApiKey() {
   return apiKey;
 }
 
-function getGeminiCandidateModels() {
-  const configuredModel = process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
+type MemoraModelPurpose = 'processing' | 'chat' | 'embedding';
 
-  return Array.from(new Set([configuredModel, DEFAULT_GEMINI_MODEL]));
+export const MEMORA_AI_MODEL_RECOMMENDATIONS = {
+  processing: {
+    model: DEFAULT_PROCESSING_MODEL,
+    useCases: [
+      'URL summaries',
+      'OCR',
+      'PDF summaries',
+      'Transcript cleanup',
+      'Tags',
+      'Categories',
+      'Metadata',
+      'Flashcards',
+      'Search keywords',
+    ],
+  },
+  search: {
+    model: DEFAULT_EMBEDDING_MODEL,
+    useCases: [
+      'Semantic search',
+      'Similarity search',
+      'Related items',
+      'RAG retrieval',
+    ],
+  },
+  chat: {
+    model: DEFAULT_CHAT_MODEL,
+    useCases: [
+      'Brain Search',
+      'AI Chat',
+      'Deep research',
+      'Vault Q&A',
+      'Multi-document reasoning',
+      'Citations',
+      'Idea generation',
+    ],
+  },
+} as const;
+
+export const MEMORA_AI_PROMPT_STRATEGY = {
+  processing: PROCESSING_SYSTEM_PROMPT,
+  chat: CHAT_SYSTEM_PROMPT,
+  generalKnowledgeFallback: GENERAL_KNOWLEDGE_SYSTEM_PROMPT,
+} as const;
+
+function getGeminiCandidateModels(purpose: MemoraModelPurpose) {
+  if (purpose === 'embedding') {
+    const configuredEmbeddingModel =
+      process.env.GEMINI_EMBEDDING_MODEL?.trim()
+      || process.env.GEMINI_SEARCH_MODEL?.trim()
+      || DEFAULT_EMBEDDING_MODEL;
+
+    return Array.from(new Set([configuredEmbeddingModel, DEFAULT_EMBEDDING_MODEL]));
+  }
+
+  if (purpose === 'chat') {
+    const configuredChatModel =
+      process.env.GEMINI_CHAT_MODEL?.trim()
+      || process.env.GEMINI_MODEL?.trim()
+      || DEFAULT_CHAT_MODEL;
+
+    return Array.from(new Set([configuredChatModel, DEFAULT_CHAT_MODEL, DEFAULT_PROCESSING_MODEL]));
+  }
+
+  const configuredProcessingModel =
+    process.env.GEMINI_PROCESSING_MODEL?.trim()
+    || process.env.GEMINI_MODEL?.trim()
+    || DEFAULT_PROCESSING_MODEL;
+
+  return Array.from(new Set([configuredProcessingModel, DEFAULT_PROCESSING_MODEL]));
+}
+
+function buildProcessingPrompt(input: {
+  normalizedContent: string;
+  sourceUrl?: string;
+  urlContext?: string;
+  fileContext?: string;
+}) {
+  return `Process the following saved content into structured vault knowledge.
+
+Return JSON only.
+
+Requested fields:
+1. title
+2. summary
+3. keyPoints
+4. type
+5. tags
+6. readTime
+7. source
+8. author
+9. flashcards
+
+Processing guidance:
+- Keep the summary grounded in the source evidence.
+- Keep key points short, useful, and searchable.
+- Tags should be high-signal retrieval aids, not generic filler.
+- Preserve technical entities, product names, tools, frameworks, dates, and URLs when relevant.
+- If the source is partial, reflect that briefly in the summary instead of guessing.
+
+Direct user content:
+${input.normalizedContent || 'No direct text content provided.'}
+
+${input.sourceUrl ? `Original URL: ${input.sourceUrl}` : 'No source URL provided.'}
+
+Fetched URL context:
+${input.urlContext || 'No URL context could be retrieved.'}
+
+${input.fileContext || ''}`.trim();
+}
+
+function buildChatPrompt(input: {
+  query: string;
+  itemsContext: string;
+  historyContext: string;
+  responseStyleInstruction: string;
+}) {
+  return `Answer the user's question using only the vault evidence below.
+${input.responseStyleInstruction}
+
+Vault evidence:
+${input.itemsContext}
+
+Conversation history:
+${input.historyContext || 'No prior chat history.'}
+
+User question:
+"${input.query}"
+
+Return JSON containing:
+1. "answer": direct user-facing answer
+2. "summaryBlock": richer structured explanation grounded in the evidence
+3. "referencedSources": exact vault items used
+4. "tags": up to 3 short context tags`;
+}
+
+function buildGeneralKnowledgePrompt(query: string, responseStyleInstruction: string) {
+  return `The vault does not contain a reliable match for this request, so answer from general knowledge only after disclosing that limitation.
+${responseStyleInstruction}
+
+User question:
+"${query}"
+
+Return JSON with:
+1. "answer": starts by disclosing the vault mismatch
+2. "summaryBlock": a structured practical explanation
+3. "tags": up to 3 short tags`;
 }
 
 // Ensure standard initialization pattern from gemini-api skill
@@ -84,32 +293,12 @@ export async function summarizeAndExtract(
 
 If the uploaded asset contains readable text or speech, extract and use it. If some parts are not accessible, explicitly acknowledge the limitation and avoid inventing missing details.`
     : '';
-  const prompt = `Analyze the following saved content or URL as accurately as possible.
-Extract/generate:
-1. A concise factual title grounded in the source.
-2. A precise executive summary in 2-3 sentences using only evidence from the source.
-3. 3-5 key points as short bullet-style statements.
-4. Classify it into one of these types: "Videos", "Articles", "PDFs", "Social Links", "Voice Notes", "Images".
-5. A list of 2-4 relevant high-level category tags.
-6. An estimated read time (or watch/listen time when appropriate).
-7. The source network or publication domain.
-8. User handle or author if present.
-9. 3 strong learning flashcards with factual answers.
-
-Accuracy rules:
-- Use only the evidence provided in the prompt or extracted from the uploaded asset.
-- Do not invent facts, quotes, statistics, speaker names, or claims.
-- If the available source is partial, reflect that uncertainty briefly in the summary instead of guessing.
-
-Direct user content:
-${normalizedContent || 'No direct text content provided.'}
-
-${sourceUrl ? `Original URL: ${sourceUrl}` : 'No source URL provided.'}
-
-Fetched URL context:
-${urlContext || 'No URL context could be retrieved.'}
-
-${fileContext}`;
+  const prompt = buildProcessingPrompt({
+    normalizedContent,
+    sourceUrl,
+    urlContext,
+    fileContext,
+  });
 
   if (!ai) {
     return buildFallbackSummary(content, sourceUrl, customType);
@@ -129,10 +318,10 @@ ${fileContext}`;
 
   try {
     const response = await generateContentWithRetry(ai, {
+      purpose: 'processing',
       contents: modelContents,
       config: {
-        systemInstruction:
-          'You are Memora AI. Produce grounded, source-faithful knowledge summaries. Prefer precision over polish. Never fabricate missing facts.',
+        systemInstruction: PROCESSING_SYSTEM_PROMPT,
         temperature: 0.1,
         responseMimeType: 'application/json',
         responseSchema: {
@@ -246,33 +435,19 @@ ${item.extractedText || 'No extracted text available.'}
         ? 'Be comprehensive. Include more nuance, structured detail, and fuller explanations while staying grounded in the saved items.'
         : 'Keep a balanced level of detail: clear, structured, and useful without becoming overly long.';
 
-  const prompt = `You are the chat interface of Memora, the user's AI Second Brain.
-The user is asking a question about their saved knowledge items.
-Understand informal wording, slang, shorthand, typos, and imperfect grammar naturally.
-Answer their request objectively, conversationally, and accurately based ONLY on their saved digital mind.
-Use the full vault evidence provided here, not just titles or short summaries.
-${responseStyleInstruction}
-
-Here is the current state of their saved mind (use this as your source of truth):
-${itemsContext}
-
-Here is the conversation history:
-${historyContext}
-
-Current User Question: "${query}"
-
-Return a response in JSON containing:
-1. "answer": A direct, friendly, conversational opening statement pointing them to their saved item (e.g., "You're thinking of 'BistroBot'—a link you saved from TechCrunch about AI-driven kitchen management."). Keep it warm and natural.
-2. "summaryBlock": A detailed, structured synthesis/summary card content. This is a stand-alone block that outlines the core answers, metrics, key takeaways, and exact explanations. Provide rich, highly clear layout information here.
-3. "referencedSources": An array of elements reflecting the exact documents from the saved mind that you used to compile this answer. Each element must contain "title" (the document title), "source" (the source publication e.g. "techcrunch.com"), and "type" ("article", "video", "tweet", "pdf" or "note" matching the icon types).
-4. "tags": An array of up to 3 short key tags for this search result context (e.g. ["TechCrunch", "Oct 12, 2023", "Startup Idea"]).`;
+  const prompt = buildChatPrompt({
+    query,
+    itemsContext,
+    historyContext,
+    responseStyleInstruction,
+  });
 
   try {
     const response = await generateContentWithRetry(ai, {
+      purpose: 'chat',
       contents: prompt,
       config: {
-        systemInstruction:
-          'You are the cognitive heart of Memora. You find connections, answer questions on saved articles, videos, social links, notes, PDFs, images, and voice notes using only the vault evidence provided. Always respond as structured JSON.',
+        systemInstruction: CHAT_SYSTEM_PROMPT,
         temperature: 0.3,
         responseMimeType: 'application/json',
         responseSchema: {
@@ -334,25 +509,14 @@ export async function answerFromGeneralKnowledge(
         ? 'Be detailed and well-structured.'
         : 'Keep the answer balanced and practical.';
 
-  const prompt = `You are Memora's assistant.
-The vault does not contain a reliable match for the user's request, so you may answer from general knowledge.
-You must clearly tell the user that no relevant vault source was found and that the answer is based on general reasoning or assumptions instead of saved references.
-Understand casual phrasing, slang, incomplete grammar, and free-form chat naturally.
-${responseStyleInstruction}
-
-User question: "${query}"
-
-Return JSON with:
-1. "answer": a natural conversational answer that starts by disclosing the vault mismatch.
-2. "summaryBlock": a clearer structured explanation of the topic, assumptions, and practical guidance.
-3. "tags": up to 3 short tags.`;
+  const prompt = buildGeneralKnowledgePrompt(query, responseStyleInstruction);
 
   try {
     const response = await generateContentWithRetry(ai, {
+      purpose: 'chat',
       contents: prompt,
       config: {
-        systemInstruction:
-          'You are a clear and honest assistant. Disclose when an answer is not grounded in the vault and avoid pretending to cite unavailable saved sources.',
+        systemInstruction: GENERAL_KNOWLEDGE_SYSTEM_PROMPT,
         temperature: 0.4,
         responseMimeType: 'application/json',
         responseSchema: {
@@ -471,7 +635,7 @@ function buildFallbackChat(query: string, items: KnowledgeItem[]) {
       : "I couldn't find a direct match in your vault for that, but here is what I can compile from your notes.",
     summaryBlock: matched
       ? matched.summary
-      : 'You can save articles, YouTube links, PDFs, or notes to your Vault using the Quick Capture button, and I will summarize them for you.',
+      : 'You can save articles, videos, PDFs, social links, screenshots, or notes to your vault and then ask me grounded questions about them.',
     referencedSources: matched
       ? [{ title: matched.title, source: matched.source.toLowerCase(), type: matched.type.toLowerCase().slice(0, -1) }]
       : [],
@@ -483,7 +647,7 @@ function buildEmptyVaultChatResponse() {
   return {
     answer: "I couldn't find any ready items in your vault yet.",
     summaryBlock:
-      'Save or finish processing an article, video, PDF, social link, or voice note first, then ask again for a grounded answer.',
+      'Save or finish processing an article, video, PDF, social link, image, or voice note first, then ask again for a grounded answer.',
     referencedSources: [],
     tags: ['No Results', 'Empty Vault'],
   };
@@ -507,7 +671,7 @@ function logGeminiFallback(message: string, error: unknown) {
 
   if (isModelAccessError(error)) {
     console.warn(
-      `Configured Gemini model could not be used with the current API key or quota. Using heuristic fallback instead.`
+      'Configured Gemini model could not be used with the current API key or quota. Using heuristic fallback instead.'
     );
     return;
   }
@@ -565,6 +729,7 @@ function isModelAccessError(error: unknown) {
 async function generateContentWithRetry(
   ai: GoogleGenAI,
   request: {
+    purpose: MemoraModelPurpose;
     contents: string | Array<{ text?: string; inlineData?: { data: string; mimeType: string } }>;
     config: {
       systemInstruction: string;
@@ -575,14 +740,15 @@ async function generateContentWithRetry(
   }
 ) {
   let lastError: unknown;
-  const candidateModels = getGeminiCandidateModels();
+  const candidateModels = getGeminiCandidateModels(request.purpose);
+  const { purpose, ...modelRequest } = request;
 
   for (const model of candidateModels) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         return await ai.models.generateContent({
           model,
-          ...request,
+          ...modelRequest,
         });
       } catch (error) {
         lastError = error;
@@ -640,7 +806,7 @@ async function fetchUrlContext(url: string, youtubeMetadata?: YouTubeMetadata | 
     clearTimeout(timeout);
 
     if (!response.ok) {
-      return null;
+      return '';
     }
 
     const contentType = response.headers.get('content-type') || '';
