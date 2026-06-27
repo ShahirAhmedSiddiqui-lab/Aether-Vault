@@ -26,7 +26,7 @@ export async function login(formData: FormData) {
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
-    redirectWithMessage(error.message);
+    redirectWithMessage('Unable to log in with the provided credentials.');
   }
 
   revalidatePath('/', 'layout');
@@ -61,11 +61,11 @@ export async function signup(formData: FormData) {
 
   if (error) {
     console.error('Signup error:', error.message);
-    redirectWithMessage(error.message);
+    redirectWithMessage('If this email can be used for signup, check your inbox for the next step. If you already have an account, try logging in.');
   }
 
   if (isExistingSignupAttempt(data.user)) {
-    redirectWithMessage('This email already has an account. Try logging in instead.');
+    redirectWithMessage('If this email can be used for signup, check your inbox for the next step. If you already have an account, try logging in.');
   }
 
   revalidatePath('/', 'layout');

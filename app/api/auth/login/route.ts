@@ -32,19 +32,19 @@ export async function POST(req: NextRequest) {
     });
 
     if (error) {
-      const normalizedErrorMessage = error.message.toLowerCase();
-      const status = normalizedErrorMessage.includes('email not confirmed') ? 403 : 400;
-      const message = normalizedErrorMessage.includes('email not confirmed')
-        ? 'Confirm your email before logging in. Check your inbox for the verification message.'
-        : error.message;
-
       logApiEvent('warn', 'auth.login.rejected', {
         ip,
-        status,
-        code: normalizedErrorMessage.includes('email not confirmed') ? 'email_not_confirmed' : 'invalid_login',
+        status: 400,
+        code: 'invalid_login_attempt',
       });
 
-      return NextResponse.json({ error: message, code: normalizedErrorMessage.includes('email not confirmed') ? 'email_not_confirmed' : 'invalid_login' }, { status });
+      return NextResponse.json(
+        {
+          error: 'Unable to log in with the provided credentials.',
+          code: 'invalid_login',
+        },
+        { status: 400 }
+      );
     }
 
     return apiSuccess({

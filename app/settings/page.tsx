@@ -19,7 +19,7 @@ export default async function SettingsPage() {
     <AccountShell
       current="settings"
       title="Settings"
-      description="Save personal preferences, tune your vault behavior, and send a secure password reset link when needed."
+      description="Save personal preferences, tune your vault behavior, and manage your password securely."
     >
       <SettingsPageClient initialProfile={profile} />
     </AccountShell>

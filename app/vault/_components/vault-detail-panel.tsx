@@ -8,6 +8,140 @@ import { Bookmark, BookOpen, ExternalLink, ImageIcon, Layers, LoaderCircle, Maxi
 import { KnowledgeItem } from '@/lib/db';
 import { cn } from '@/lib/utils';
 
+type VideoPreview =
+  | { kind: 'file'; src: string; mimeType?: string; poster?: string }
+  | { kind: 'embed'; src: string; title: string }
+  | { kind: 'thumbnail'; src: string; alt: string }
+  | { kind: 'placeholder' };
+
+const DIRECT_VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.ogg', '.mov', '.m4v']);
+
+function resolveVideoPreview(item: KnowledgeItem): VideoPreview {
+  const fileMime = item.fileMime || item.previewMetadata?.mimeType;
+  const thumbnailUrl = item.previewMetadata?.thumbnailUrl;
+
+  if (item.fileUrl && isDirectVideoFile(item.fileUrl, fileMime)) {
+    return {
+      kind: 'file',
+      src: item.fileUrl,
+      mimeType: fileMime,
+      poster: thumbnailUrl,
+    };
+  }
+
+  const sourceUrl = item.url || item.previewMetadata?.sourceUrl;
+  if (!sourceUrl) {
+    return thumbnailUrl
+      ? { kind: 'thumbnail', src: thumbnailUrl, alt: item.title }
+      : { kind: 'placeholder' };
+  }
+
+  if (isDirectVideoFile(sourceUrl, fileMime)) {
+    return {
+      kind: 'file',
+      src: sourceUrl,
+      mimeType: fileMime,
+      poster: thumbnailUrl,
+    };
+  }
+
+  const embedUrl = getVideoEmbedUrl(sourceUrl);
+  if (embedUrl) {
+    return {
+      kind: 'embed',
+      src: embedUrl,
+      title: item.title || 'Video preview',
+    };
+  }
+
+  return thumbnailUrl
+    ? { kind: 'thumbnail', src: thumbnailUrl, alt: item.title }
+    : { kind: 'placeholder' };
+}
+
+function isDirectVideoFile(url: string, mimeType?: string) {
+  if (mimeType?.startsWith('video/')) {
+    return true;
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+    const pathname = parsedUrl.pathname.toLowerCase();
+    return Array.from(DIRECT_VIDEO_EXTENSIONS).some((extension) => pathname.endsWith(extension));
+  } catch {
+    return false;
+  }
+}
+
+function getVideoEmbedUrl(url: string) {
+  try {
+    const parsedUrl = new URL(url);
+    const hostname = parsedUrl.hostname.toLowerCase();
+    const pathnameSegments = parsedUrl.pathname.split('/').filter(Boolean);
+
+    if (hostname.includes('youtu.be')) {
+      const videoId = pathnameSegments[0];
+      return videoId ? `https://www.youtube-nocookie.com/embed/${videoId}` : null;
+    }
+
+    if (hostname.includes('youtube.com')) {
+      if (parsedUrl.pathname === '/watch') {
+        const videoId = parsedUrl.searchParams.get('v');
+        return videoId ? `https://www.youtube-nocookie.com/embed/${videoId}` : null;
+      }
+
+      if (parsedUrl.pathname.startsWith('/shorts/') || parsedUrl.pathname.startsWith('/embed/')) {
+        const videoId = pathnameSegments[1];
+        return videoId ? `https://www.youtube-nocookie.com/embed/${videoId}` : null;
+      }
+    }
+
+    if (hostname.includes('vimeo.com')) {
+      const videoId = pathnameSegments.find((segment) => /^\d+$/.test(segment));
+      return videoId ? `https://player.vimeo.com/video/${videoId}` : null;
+    }
+
+    if (hostname.includes('loom.com')) {
+      const videoId = pathnameSegments[pathnameSegments.length - 1];
+      return videoId ? `https://www.loom.com/embed/${videoId}` : null;
+    }
+
+    if (hostname === 'dai.ly') {
+      const videoId = pathnameSegments[0];
+      return videoId ? `https://www.dailymotion.com/embed/video/${videoId}` : null;
+    }
+
+    if (hostname.includes('dailymotion.com')) {
+      if (parsedUrl.pathname.startsWith('/embed/video/')) {
+        return url;
+      }
+
+      const videoId = pathnameSegments[pathnameSegments.length - 1];
+      return videoId ? `https://www.dailymotion.com/embed/video/${videoId}` : null;
+    }
+
+    if (hostname.includes('wistia.com')) {
+      const mediaIndex = pathnameSegments.findIndex((segment) => segment === 'medias');
+      const videoId = mediaIndex >= 0 ? pathnameSegments[mediaIndex + 1] : null;
+      return videoId ? `https://fast.wistia.net/embed/iframe/${videoId}` : null;
+    }
+
+    if (hostname.includes('fast.wistia.net') && parsedUrl.pathname.includes('/embed/iframe/')) {
+      return url;
+    }
+
+    if (hostname.includes('drive.google.com')) {
+      const fileIndex = pathnameSegments.findIndex((segment) => segment === 'd');
+      const fileId = fileIndex >= 0 ? pathnameSegments[fileIndex + 1] : null;
+      return fileId ? `https://drive.google.com/file/d/${fileId}/preview` : null;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 type VaultDetailPanelProps = {
   currentItem?: KnowledgeItem;
   isTrashView: boolean;
@@ -50,6 +184,8 @@ export function VaultDetailPanel({
   if (!currentItem) {
     return null;
   }
+
+  const videoPreview = currentItem.type === 'Videos' ? resolveVideoPreview(currentItem) : null;
 
   return (
     <motion.div
@@ -217,91 +353,71 @@ export function VaultDetailPanel({
             </div>
           )}
 
-         {currentItem.type === 'Videos' && (
-  <div className="space-y-2">
-    {currentItem.url ? (
-      <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
-        <div className="relative aspect-video w-full bg-neutral-100">
-          {(() => {
-            let youtubeVideoId: string | null = null
+          {currentItem.type === 'Videos' && (
+            <div className="space-y-2">
+              <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
+                <div className="relative aspect-video w-full bg-neutral-100">
+                  {videoPreview?.kind === 'file' && (
+                    <video
+                      src={videoPreview.src}
+                      poster={videoPreview.poster}
+                      className="h-full w-full bg-black"
+                      controls
+                      playsInline
+                      preload="metadata"
+                    >
+                      {videoPreview.mimeType ? <source src={videoPreview.src} type={videoPreview.mimeType} /> : null}
+                    </video>
+                  )}
 
-            try {
-              const parsedUrl = new URL(currentItem.url)
+                  {videoPreview?.kind === 'embed' && (
+                    <iframe
+                      src={videoPreview.src}
+                      title={videoPreview.title}
+                      className="h-full w-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                      referrerPolicy="strict-origin-when-cross-origin"
+                    />
+                  )}
 
-              if (parsedUrl.hostname.includes('youtu.be')) {
-                youtubeVideoId =
-                  parsedUrl.pathname.split('/').filter(Boolean)[0] ?? null
-              }
+                  {videoPreview?.kind === 'thumbnail' && (
+                    <div className="relative h-full w-full">
+                      <img
+                        src={videoPreview.src}
+                        alt={videoPreview.alt}
+                        className="h-full w-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center bg-neutral-950/35">
+                        <div className="flex items-center gap-2 rounded-full bg-white/92 px-3 py-1.5 text-[11px] font-semibold text-neutral-900 shadow-sm">
+                          <Play className="h-3.5 w-3.5 fill-current" />
+                          <span>Open externally to play</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
-              if (parsedUrl.hostname.includes('youtube.com')) {
-                if (parsedUrl.pathname === '/watch') {
-                  youtubeVideoId = parsedUrl.searchParams.get('v')
-                }
-
-                if (parsedUrl.pathname.startsWith('/shorts/')) {
-                  youtubeVideoId =
-                    parsedUrl.pathname.split('/').filter(Boolean)[1] ?? null
-                }
-
-                if (parsedUrl.pathname.startsWith('/embed/')) {
-                  youtubeVideoId =
-                    parsedUrl.pathname.split('/').filter(Boolean)[1] ?? null
-                }
-              }
-            } catch {
-              youtubeVideoId = null
-            }
-
-            const youtubeEmbedUrl = youtubeVideoId
-              ? `https://www.youtube-nocookie.com/embed/${youtubeVideoId}`
-              : null
-
-            if (youtubeEmbedUrl) {
-              return (
-                <iframe
-                  src={youtubeEmbedUrl}
-                  title={currentItem.title || 'YouTube video preview'}
-                  className="h-full w-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                  referrerPolicy="strict-origin-when-cross-origin"
-                />
-              )
-            }
-
-            if (currentItem.previewMetadata?.thumbnailUrl) {
-              return (
-                <img
-                  src={currentItem.previewMetadata.thumbnailUrl}
-                  alt={currentItem.title}
-                  className="h-full w-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              )
-            }
-
-            return (
-              <div className="flex h-full w-full items-center justify-center bg-neutral-950 text-white">
-                <Play className="h-8 w-8" />
+                  {videoPreview?.kind === 'placeholder' && (
+                    <div className="flex h-full w-full items-center justify-center bg-neutral-950 text-white">
+                      <Play className="h-8 w-8" />
+                    </div>
+                  )}
+                </div>
               </div>
-            )
-          })()}
-        </div>
-      </div>
-    ) : null}
 
-    {currentItem.url && (
-      <a
-        href={currentItem.url}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex text-sm font-medium text-neutral-700 underline underline-offset-4 hover:text-neutral-950"
-      >
-        Open video
-      </a>
-    )}
-  </div>
-)}
+              {currentItem.url && (
+                <a
+                  href={currentItem.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex text-sm font-medium text-neutral-700 underline underline-offset-4 hover:text-neutral-950"
+                >
+                  Open video
+                </a>
+              )}
+            </div>
+          )}
 
           {currentItem.type === 'PDFs' && (
             <div className="space-y-2">
@@ -594,4 +710,3 @@ export function VaultDetailPanel({
     </motion.div>
   );
 }
-

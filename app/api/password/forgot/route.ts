@@ -30,7 +30,11 @@ export async function POST(req: NextRequest) {
         ip,
         code: 'password_reset_failed',
       });
-      return NextResponse.json({ error: error.message }, { status: 400 });
+
+      return apiSuccess({
+        success: true,
+        message: 'If that account exists, a password reset email has been sent.',
+      });
     }
 
     return apiSuccess({

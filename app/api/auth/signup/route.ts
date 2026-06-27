@@ -54,17 +54,21 @@ export async function POST(req: NextRequest) {
         ip,
         code: 'signup_failed',
       });
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return apiSuccess({
+        success: true,
+        requiresEmailConfirmation: true,
+        message: 'If this email can be used for signup, check your inbox for the next step. If you already have an account, try logging in.',
+        user: null,
+      });
     }
 
     if (isExistingSignupAttempt(data.user)) {
-      return NextResponse.json(
-        {
-          error: 'This email already has an account. Try logging in instead.',
-          code: 'existing_account',
-        },
-        { status: 409 }
-      );
+      return apiSuccess({
+        success: true,
+        requiresEmailConfirmation: true,
+        message: 'If this email can be used for signup, check your inbox for the next step. If you already have an account, try logging in.',
+        user: null,
+      });
     }
 
     return apiSuccess({

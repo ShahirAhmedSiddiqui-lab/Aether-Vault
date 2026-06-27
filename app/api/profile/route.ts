@@ -20,6 +20,7 @@ const ALLOWED_AVATAR_MIME_TYPES = new Set([
   'image/webp',
   'image/gif',
 ]);
+const AVATAR_SIZE_TOLERANCE_BYTES = 1024;
 
 type AvatarFileData = {
   base64: string;
@@ -111,7 +112,18 @@ export async function PATCH(req: NextRequest) {
         });
       }
 
-      if ((avatarFileData.size ?? 0) > MAX_AVATAR_SIZE) {
+      const actualSize = getBase64ByteSize(avatarFileData.base64);
+      const declaredSize = typeof avatarFileData.size === 'number' && avatarFileData.size > 0
+        ? avatarFileData.size
+        : actualSize;
+
+      if (Math.abs(declaredSize - actualSize) > AVATAR_SIZE_TOLERANCE_BYTES) {
+        throw new ApiRouteError(400, 'Avatar upload metadata does not match the payload.', {
+          code: 'invalid_upload_size',
+        });
+      }
+
+      if (actualSize > MAX_AVATAR_SIZE) {
         throw new ApiRouteError(400, 'Avatar must be 5 MB or smaller.', {
           code: 'upload_too_large',
         });
@@ -120,6 +132,12 @@ export async function PATCH(req: NextRequest) {
       const extension = getFileExtension(avatarFileData.name, avatarFileData.mimeType);
       const avatarPath = `${user.id}/avatar-${Date.now()}.${extension}`;
       const fileBuffer = Buffer.from(avatarFileData.base64, 'base64');
+
+      if (!matchesAvatarSignature(fileBuffer, avatarFileData.mimeType)) {
+        throw new ApiRouteError(400, 'Avatar file content does not match the provided image type.', {
+          code: 'invalid_upload_type',
+        });
+      }
 
       const { error: uploadError } = await supabase.storage.from(PROFILE_ASSETS_BUCKET).upload(avatarPath, fileBuffer, {
         contentType: avatarFileData.mimeType,
@@ -194,7 +212,7 @@ function parseAvatarFileData(value: unknown): AvatarFileData | null {
 
   const data = value as Record<string, unknown>;
   const base64 = typeof data.base64 === 'string' ? data.base64 : '';
-  const mimeType = typeof data.mimeType === 'string' ? data.mimeType : '';
+  const mimeType = typeof data.mimeType === 'string' ? data.mimeType.split(';')[0].trim().toLowerCase() : '';
   const name = typeof data.name === 'string' ? data.name : undefined;
   const size = typeof data.size === 'number' ? data.size : undefined;
 
@@ -203,4 +221,38 @@ function parseAvatarFileData(value: unknown): AvatarFileData | null {
   }
 
   return { base64, mimeType, name, size };
+}
+
+function getBase64ByteSize(value: string) {
+  const normalized = value.replace(/\s/g, '');
+  const padding = normalized.endsWith('==') ? 2 : normalized.endsWith('=') ? 1 : 0;
+  return Math.floor((normalized.length * 3) / 4) - padding;
+}
+
+function matchesAvatarSignature(fileBuffer: Buffer, mimeType: string) {
+  if (fileBuffer.length < 4) {
+    return false;
+  }
+
+  if (mimeType === 'image/png') {
+    return fileBuffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  }
+
+  if (mimeType === 'image/jpeg' || mimeType === 'image/jpg') {
+    return fileBuffer[0] === 0xff && fileBuffer[1] === 0xd8 && fileBuffer[2] === 0xff;
+  }
+
+  if (mimeType === 'image/gif') {
+    const header = fileBuffer.subarray(0, 6).toString('ascii');
+    return header === 'GIF87a' || header === 'GIF89a';
+  }
+
+  if (mimeType === 'image/webp') {
+    return (
+      fileBuffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+      fileBuffer.subarray(8, 12).toString('ascii') === 'WEBP'
+    );
+  }
+
+  return false;
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { ApiRouteError, apiSuccess, handleApiRouteError, unauthorized } from '@/lib/api/errors';
+import { enforceRateLimit, getClientIp } from '@/lib/api/rate-limit';
 import { ensureObject, readJsonBody, readRequiredString } from '@/lib/api/validation';
 import { createClient } from '@/lib/supabase/server';
 
@@ -14,6 +15,14 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return unauthorized();
     }
+
+    enforceRateLimit({
+      key: `auth:password-update:${user.id}:${getClientIp(req)}`,
+      limit: 5,
+      windowMs: 60_000,
+      message: 'Too many password change attempts. Please wait a minute and try again.',
+      code: 'password_update_rate_limited',
+    });
 
     const body = ensureObject(await readJsonBody(req));
     const normalizedCurrentPassword = readRequiredString(body.currentPassword, {
