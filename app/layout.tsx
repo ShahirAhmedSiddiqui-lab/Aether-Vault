@@ -1,6 +1,7 @@
 import type {Metadata} from 'next';
 import { Manrope } from 'next/font/google';
 import { AuthSessionSync } from '@/app/_components/auth-session-sync';
+import { FlashToastSync } from '@/app/_components/flash-toast-sync';
 import { Toaster } from 'sonner';
 import './globals.css'; // Global styles
 
@@ -24,6 +25,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
     <html lang="en">
       <body suppressHydrationWarning className={`${manrope.variable} font-[family:var(--font-memora)]`}>
         <AuthSessionSync />
+        <FlashToastSync />
         <Toaster
           position="bottom-right"
           richColors

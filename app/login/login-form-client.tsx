@@ -3,7 +3,9 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { RefreshCcw } from 'lucide-react';
+import { toast } from 'sonner';
 import { PasswordInput } from '@/app/_components/password-input';
+import { queueFlashToast } from '@/lib/client/flash-toast';
 
 type LoginFormClientProps = {
   initialMessage?: string;
@@ -33,6 +35,10 @@ export function LoginFormClient({ initialMessage }: LoginFormClientProps) {
   const [isLoggingIn, setIsLoggingIn] = React.useState(false);
   const [isSigningUp, setIsSigningUp] = React.useState(false);
   const [isSendingReset, setIsSendingReset] = React.useState(false);
+
+  React.useEffect(() => {
+    void router.prefetch('/vault');
+  }, [router]);
 
   const showError = React.useCallback((nextMessage: string) => {
     setMessage(normalizeAuthMessage(nextMessage));
@@ -74,6 +80,7 @@ export function LoginFormClient({ initialMessage }: LoginFormClientProps) {
         throw new Error(data.error || 'Unable to log in.');
       }
 
+      queueFlashToast({ message: 'Logged in successfully.' });
       router.replace('/vault');
       router.refresh();
     } catch (error) {
@@ -124,6 +131,7 @@ export function LoginFormClient({ initialMessage }: LoginFormClientProps) {
         setName('');
         setEmail('');
         setPassword('');
+        toast.success(data.message || 'Account created. Check your email to confirm your signup, then log in.');
         showSuccess(data.message || 'Account created. Check your email to confirm your signup, then log in.');
         return;
       }
@@ -131,6 +139,7 @@ export function LoginFormClient({ initialMessage }: LoginFormClientProps) {
       setName('');
       setEmail('');
       setPassword('');
+      queueFlashToast({ message: 'Account created successfully.' });
       router.replace('/vault');
       router.refresh();
     } catch (error) {
@@ -172,6 +181,7 @@ export function LoginFormClient({ initialMessage }: LoginFormClientProps) {
         throw new Error(data.error || 'Unable to send reset email.');
       }
 
+      toast.success(data.message || 'If that account exists, a password reset email has been sent.');
       showSuccess(data.message || 'If that account exists, a password reset email has been sent.');
     } catch (error) {
       console.error(error);

@@ -425,7 +425,7 @@ export function VaultContentPanel({
               className={cn(
                 'memora-soft-outline relative flex cursor-pointer flex-col justify-between rounded-xl border bg-white text-left transition-premium group',
                 compactMode ? 'p-4' : 'p-5',
-                isSelected ? 'ring-1.5 ring-neutral-900 border-transparent shadow shadow-neutral-100' : 'border-neutral-200 hover:border-neutral-300 shadow-sm'
+                isSelected ? 'memora-selected-card' : 'border-neutral-200 hover:border-neutral-300 shadow-sm'
               )}
             >
               {(item.type === 'Articles' || item.type === 'Social Links') && item.previewMetadata?.thumbnailUrl && (

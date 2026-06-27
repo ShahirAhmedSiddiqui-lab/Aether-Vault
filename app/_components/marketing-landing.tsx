@@ -27,8 +27,13 @@ export function MarketingLanding() {
   const rotateY = useSpring(rawRotateY, { stiffness: 90, damping: 22, mass: 0.7 });
   const shiftX = useSpring(rawShiftX, { stiffness: 80, damping: 24, mass: 0.9 });
   const shiftY = useSpring(rawShiftY, { stiffness: 80, damping: 24, mass: 0.9 });
+  const rawGlowDriftX = useMotionValue(0);
+  const rawGlowDriftY = useMotionValue(0);
+  const glowDriftX = useSpring(rawGlowDriftX, { stiffness: 55, damping: 20, mass: 1 });
+  const glowDriftY = useSpring(rawGlowDriftY, { stiffness: 55, damping: 20, mass: 1 });
   const shaderGlow = useMotionTemplate`radial-gradient(circle at ${pointerX}00% ${pointerY}00%, rgba(0,0,0,0.12), rgba(0,0,0,0.04) 18%, rgba(255,255,255,0.92) 44%, rgba(255,255,255,0) 70%)`;
   const shaderMesh = useMotionTemplate`radial-gradient(circle at ${pointerX}00% ${pointerY}00%, rgba(255,255,255,0.86), rgba(255,255,255,0) 34%), linear-gradient(180deg, rgba(255,255,255,0.94) 0%, rgba(246,246,247,0.98) 100%)`;
+  const shaderLines = useMotionTemplate`radial-gradient(circle at ${pointerX}00% ${pointerY}00%, rgba(15,23,42,0.12), rgba(15,23,42,0.02) 24%, rgba(255,255,255,0) 55%), linear-gradient(115deg, rgba(15,23,42,0.08), rgba(255,255,255,0) 34%, rgba(15,23,42,0.06) 72%, rgba(255,255,255,0.22))`;
 
   React.useEffect(() => {
     const currentLine = rotatingLines[typedLineIndex] ?? '';
@@ -63,6 +68,17 @@ export function MarketingLanding() {
     };
   }, [isDeleting, rotatingLines, typedLineIndex, typedText]);
 
+  React.useEffect(() => {
+    const interval = window.setInterval(() => {
+      rawGlowDriftX.set((Math.random() - 0.5) * 42);
+      rawGlowDriftY.set((Math.random() - 0.5) * 28);
+    }, 2400);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [rawGlowDriftX, rawGlowDriftY]);
+
   const handlePointerMove = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     const nextX = (event.clientX - bounds.left) / bounds.width;
@@ -76,7 +92,9 @@ export function MarketingLanding() {
     rawRotateY.set((clampedX - 0.5) * 10);
     rawShiftX.set((clampedX - 0.5) * 26);
     rawShiftY.set((clampedY - 0.5) * 18);
-  }, [pointerX, pointerY, rawRotateX, rawRotateY, rawShiftX, rawShiftY]);
+    rawGlowDriftX.set((clampedX - 0.5) * 80);
+    rawGlowDriftY.set((clampedY - 0.5) * 56);
+  }, [pointerX, pointerY, rawGlowDriftX, rawGlowDriftY, rawRotateX, rawRotateY, rawShiftX, rawShiftY]);
 
   const handlePointerLeave = React.useCallback(() => {
     pointerX.set(0.5);
@@ -85,7 +103,9 @@ export function MarketingLanding() {
     rawRotateY.set(0);
     rawShiftX.set(0);
     rawShiftY.set(0);
-  }, [pointerX, pointerY, rawRotateX, rawRotateY, rawShiftX, rawShiftY]);
+    rawGlowDriftX.set(0);
+    rawGlowDriftY.set(0);
+  }, [pointerX, pointerY, rawGlowDriftX, rawGlowDriftY, rawRotateX, rawRotateY, rawShiftX, rawShiftY]);
 
   return (
     <div
@@ -99,8 +119,13 @@ export function MarketingLanding() {
       >
         <motion.div className="absolute inset-0" style={{ background: shaderMesh }} />
         <motion.div className="absolute inset-0 opacity-90 mix-blend-screen" style={{ background: shaderGlow }} />
+        <motion.div className="absolute inset-0 opacity-70 mix-blend-multiply" style={{ background: shaderLines }} />
         <motion.div
-          className="absolute left-1/2 top-1/2 h-[140vh] w-[140vw] -translate-x-1/2 -translate-y-1/2 [transform-style:preserve-3d]"
+          className="memora-hero-depth absolute inset-x-[-12%] top-[12%] h-[72vh] rounded-full opacity-80 blur-3xl"
+          style={{ x: glowDriftX, y: glowDriftY }}
+        />
+        <motion.div
+          className="animate-memora-hex-drift absolute left-1/2 top-1/2 h-[140vh] w-[140vw] -translate-x-1/2 -translate-y-1/2 [transform-style:preserve-3d]"
           style={{
             x: shiftX,
             y: shiftY,
@@ -139,6 +164,32 @@ export function MarketingLanding() {
             <ellipse cx="800" cy="420" rx="430" ry="290" fill="url(#hexFocus)" />
           </svg>
         </motion.div>
+        <motion.div
+          className="absolute left-1/2 top-1/2 h-[132vh] w-[132vw] -translate-x-1/2 -translate-y-1/2 opacity-[0.2] blur-[1px]"
+          style={{
+            x: shiftX,
+            y: shiftY,
+            rotateX,
+            rotateY,
+            scale: 1.035,
+          }}
+        >
+          <svg className="h-full w-full" viewBox="0 0 1600 1200" fill="none">
+            <path
+              d="M180 164L314 88L448 164V324L314 400L180 324V164ZM448 164L582 88L716 164V324L582 400L448 324V164ZM716 164L850 88L984 164V324L850 400L716 324V164ZM984 164L1118 88L1252 164V324L1118 400L984 324V164ZM314 400L448 324L582 400V560L448 636L314 560V400ZM582 400L716 324L850 400V560L716 636L582 560V400ZM850 400L984 324L1118 400V560L984 636L850 560V400ZM1118 400L1252 324L1386 400V560L1252 636L1118 560V400ZM180 636L314 560L448 636V796L314 872L180 796V636ZM448 636L582 560L716 636V796L582 872L448 796V636ZM716 636L850 560L984 636V796L850 872L716 796V636ZM984 636L1118 560L1252 636V796L1118 872L984 796V636Z"
+              stroke="rgba(15,23,42,0.22)"
+              strokeWidth="1.35"
+            />
+          </svg>
+        </motion.div>
+        <motion.div
+          className="animate-memora-orb-pulse absolute left-[16%] top-[20%] h-28 w-28 rounded-full bg-white/70 blur-3xl"
+          style={{ x: glowDriftX }}
+        />
+        <motion.div
+          className="animate-memora-orb-pulse absolute bottom-[18%] right-[14%] h-32 w-32 rounded-full bg-neutral-900/10 blur-3xl"
+          style={{ y: glowDriftY }}
+        />
       </div>
 
       <motion.header

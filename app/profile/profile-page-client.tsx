@@ -3,6 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { Camera, RefreshCcw, Save, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { type UserProfile } from '@/lib/db';
 
 export function ProfilePageClient({ initialProfile }: { initialProfile: UserProfile }) {
@@ -82,6 +83,7 @@ export function ProfilePageClient({ initialProfile }: { initialProfile: UserProf
       setAvatarFileData(null);
       setAvatarPreview(null);
       setRemoveAvatar(false);
+      toast.success('Profile updated successfully.');
       setFeedback('Profile updated successfully.');
     } catch (saveError) {
       console.error(saveError);

@@ -3,6 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { RefreshCcw, Save, ShieldCheck } from 'lucide-react';
+import { toast } from 'sonner';
 import { type UserPreferences, type UserProfile } from '@/lib/db';
 
 export function SettingsPageClient({ initialProfile }: { initialProfile: UserProfile }) {
@@ -41,6 +42,7 @@ export function SettingsPageClient({ initialProfile }: { initialProfile: UserPro
       }
 
       setPreferences(data.preferences);
+      toast.success('Settings saved successfully.');
       setFeedback('Settings saved successfully.');
     } catch (saveError) {
       console.error(saveError);
@@ -69,6 +71,7 @@ export function SettingsPageClient({ initialProfile }: { initialProfile: UserPro
         throw new Error(data.error || 'Unable to send reset email.');
       }
 
+      toast.success('Password reset email sent successfully.');
       setSecurityFeedback('Password reset email sent. Open the latest message to choose a new password.');
     } catch (sendError) {
       console.error(sendError);

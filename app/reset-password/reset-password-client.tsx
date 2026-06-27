@@ -4,9 +4,11 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, RefreshCcw } from 'lucide-react';
+import { toast } from 'sonner';
 import { BrandLockup } from '@/app/_components/brand-lockup';
 import { PasswordInput } from '@/app/_components/password-input';
 import { broadcastAuthLinkEvent } from '@/lib/auth-link-events';
+import { queueFlashToast } from '@/lib/client/flash-toast';
 import { createClient } from '@/lib/supabase/client';
 
 function getResetLinkFingerprint() {
@@ -150,6 +152,7 @@ export function ResetPasswordClient() {
         throw new Error(data.error || 'Unable to send reset email.');
       }
 
+      toast.success(data.message || 'If that account exists, a reset email has been sent.');
       setFeedback(data.message || 'If that account exists, a reset email has been sent.');
     } catch (requestError) {
       console.error(requestError);
@@ -210,6 +213,7 @@ export function ResetPasswordClient() {
       }
 
       await supabase.auth.signOut();
+      queueFlashToast({ message: 'Password changed successfully. Please log in with your new password.' });
       broadcastAuthLinkEvent({
         type: 'password_reset_completed',
         message: 'Password changed successfully. Please log in again with your new password.',
@@ -219,6 +223,7 @@ export function ResetPasswordClient() {
       setPassword('');
       setConfirmPassword('');
       setHasCompleted(true);
+      toast.success('Password changed successfully.');
       setFeedback('Password changed successfully. You can now close this tab and continue from the previous Memora tab.');
     } catch (updateError) {
       console.error(updateError);
