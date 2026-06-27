@@ -6,12 +6,52 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, RefreshCcw } from 'lucide-react';
 import { BrandLockup } from '@/app/_components/brand-lockup';
 import { PasswordInput } from '@/app/_components/password-input';
+import { broadcastAuthLinkEvent } from '@/lib/auth-link-events';
 import { createClient } from '@/lib/supabase/client';
+
+function getResetLinkFingerprint() {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  const search = window.location.search;
+  const hash = window.location.hash;
+
+  if (!search && !hash) {
+    return '';
+  }
+
+  return `${window.location.pathname}${search}${hash}`;
+}
+
+async function claimAuthLink(fingerprint: string, linkType: 'confirmation' | 'recovery') {
+  const response = await fetch('/api/claim-auth-link', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      fingerprint,
+      linkType,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Unable to validate auth link right now.');
+  }
+
+  const data = await response.json();
+  return Boolean(data.claimed);
+}
 
 export function ResetPasswordClient() {
   const router = useRouter();
-  const [mode, setMode] = React.useState<'request' | 'update'>('request');
+  const [mode, setMode] = React.useState<'request' | 'redeem' | 'update'>('request');
+  const [isRecoveryFlow, setIsRecoveryFlow] = React.useState(false);
+  const [hasCompleted, setHasCompleted] = React.useState(false);
+  const [isRedeemingLink, setIsRedeemingLink] = React.useState(false);
   const [email, setEmail] = React.useState('');
+  const [currentPassword, setCurrentPassword] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -30,60 +70,45 @@ export function ResetPasswordClient() {
       const code = search.get('code');
       const hashType = hashParams.get('type');
       const hasRecoveryHashSession = hashType === 'recovery' && !!hashParams.get('access_token');
+      const errorCode = search.get('error_code');
+      const errorDescription = search.get('error_description');
+
+      if (errorCode || errorDescription || hash.includes('error=')) {
+        setMode('request');
+        setIsRecoveryFlow(false);
+        setError('This reset link has expired. Request a new one to continue.');
+        return;
+      }
+
+      if (hasRecoveryHashSession) {
+        setError(null);
+        setMode('redeem');
+        setIsRecoveryFlow(true);
+        return;
+      }
+
+      if ((tokenHash && type) || code) {
+        setError(null);
+        setMode('redeem');
+        setIsRecoveryFlow(true);
+        return;
+      }
 
       const {
         data: { session: existingSession },
       } = await supabase.auth.getSession();
 
-      if (existingSession || hasRecoveryHashSession) {
+      if (existingSession) {
         setError(null);
         setMode('update');
-        if (window.location.search || window.location.hash) {
-          window.history.replaceState({}, document.title, '/reset-password');
-        }
+        setIsRecoveryFlow(false);
         return;
       }
 
-      if (tokenHash && type) {
-        const { error: verifyError } = await supabase.auth.verifyOtp({
-          token_hash: tokenHash,
-          type: type as 'recovery' | 'email' | 'signup' | 'invite' | 'email_change' | 'magiclink',
-        });
-
-        if (verifyError) {
-          const {
-            data: { session: fallbackSession },
-          } = await supabase.auth.getSession();
-
-          if (!fallbackSession) {
-            setError('This reset link is invalid or has expired. Request a fresh one and try again.');
-            return;
-          }
-        }
-
-        setError(null);
-        setMode('update');
-        window.history.replaceState({}, document.title, '/reset-password');
-        return;
-      }
-
-      if (code) {
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-
-        if (exchangeError) {
-          setError('This reset link is invalid or has expired. Request a fresh one and try again.');
-          return;
-        }
-
-        setError(null);
-        setMode('update');
-        window.history.replaceState({}, document.title, '/reset-password');
-        return;
-      }
-
-      if (hash.includes('type=recovery')) {
-        setError(null);
-        setMode('update');
+      if ((tokenHash && type) || code || hash.includes('type=recovery')) {
+        setMode('request');
+        setIsRecoveryFlow(false);
+        setError('This reset link has expired. Request a new one to continue.');
         return;
       }
     };
@@ -96,6 +121,7 @@ export function ResetPasswordClient() {
       if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
         setError(null);
         setMode('update');
+        setIsRecoveryFlow(event === 'PASSWORD_RECOVERY');
       }
     });
 
@@ -139,8 +165,12 @@ export function ResetPasswordClient() {
     setFeedback(null);
     setError(null);
 
-    if (!password || !confirmPassword) {
-      setError('Enter your new password twice to continue.');
+    if (!password || !confirmPassword || (!isRecoveryFlow && !currentPassword)) {
+      setError(
+        isRecoveryFlow
+          ? 'Enter your new password twice to continue.'
+          : 'Current password and your new password are required.'
+      );
       setIsSubmitting(false);
       return;
     }
@@ -153,24 +183,114 @@ export function ResetPasswordClient() {
 
     try {
       const supabase = createClient();
-      const { error: updateError } = await supabase.auth.updateUser({
-        password,
-      });
+      if (!isRecoveryFlow && currentPassword) {
+        const response = await fetch('/api/password/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            currentPassword,
+            password,
+          }),
+        });
+        const data = await response.json();
 
-      if (updateError) {
-        throw updateError;
+        if (!response.ok) {
+          throw new Error(data.error || 'Unable to update password.');
+        }
+      } else {
+        const { error: updateError } = await supabase.auth.updateUser({
+          password,
+        });
+
+        if (updateError) {
+          throw updateError;
+        }
       }
 
       await supabase.auth.signOut();
-      setFeedback('Password updated successfully. Redirecting to login...');
-      window.setTimeout(() => {
-        router.replace('/login?message=Password%20updated%20successfully.%20Please%20log%20in%20with%20your%20new%20password.');
-      }, 900);
+      broadcastAuthLinkEvent({
+        type: 'password_reset_completed',
+        message: 'Password changed successfully. Please log in again with your new password.',
+        issuedAt: Date.now(),
+      });
+      setCurrentPassword('');
+      setPassword('');
+      setConfirmPassword('');
+      setHasCompleted(true);
+      setFeedback('Password changed successfully. You can now close this tab and continue from the previous Memora tab.');
     } catch (updateError) {
       console.error(updateError);
       setError(updateError instanceof Error ? updateError.message : 'Unable to update password.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const redeemRecoveryLink = async () => {
+    setIsRedeemingLink(true);
+    setFeedback(null);
+    setError(null);
+
+    try {
+      const supabase = createClient();
+      const hash = window.location.hash;
+      const hashParams = new URLSearchParams(hash.slice(1));
+      const search = new URLSearchParams(window.location.search);
+      const tokenHash = search.get('token_hash');
+      const type = search.get('type');
+      const code = search.get('code');
+      const hashType = hashParams.get('type');
+      const hasRecoveryHashSession = hashType === 'recovery' && !!hashParams.get('access_token');
+      const linkFingerprint = getResetLinkFingerprint();
+
+      const claimed = await claimAuthLink(linkFingerprint, 'recovery');
+      if (!claimed) {
+        setMode('request');
+        setIsRecoveryFlow(false);
+        setError('This reset link has expired. Request a new one to continue.');
+        return;
+      }
+
+      if (tokenHash && type) {
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: type as 'recovery' | 'email' | 'signup' | 'invite' | 'email_change' | 'magiclink',
+        });
+
+        if (verifyError) {
+          setMode('request');
+          setIsRecoveryFlow(false);
+          setError('This reset link has expired. Request a new one to continue.');
+          return;
+        }
+      } else if (code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+
+        if (exchangeError) {
+          setMode('request');
+          setIsRecoveryFlow(false);
+          setError('This reset link has expired. Request a new one to continue.');
+          return;
+        }
+      } else if (!hasRecoveryHashSession) {
+        setMode('request');
+        setIsRecoveryFlow(false);
+        setError('This reset link has expired. Request a new one to continue.');
+        return;
+      }
+
+      setMode('update');
+      setIsRecoveryFlow(true);
+      window.history.replaceState({}, document.title, '/reset-password');
+    } catch (redeemError) {
+      console.error(redeemError);
+      setMode('request');
+      setIsRecoveryFlow(false);
+      setError('This reset link has expired. Request a new one to continue.');
+    } finally {
+      setIsRedeemingLink(false);
     }
   };
 
@@ -194,17 +314,23 @@ export function ResetPasswordClient() {
               {mode === 'request' ? 'Request Reset' : 'Set New Password'}
             </p>
             <h1 className="text-3xl font-black tracking-tight text-neutral-950">
-              {mode === 'request' ? 'Recover access to your vault.' : 'Choose a new password.'}
+              {hasCompleted ? 'Password updated.' : mode === 'request' ? 'Recover access to your vault.' : 'Choose a new password.'}
             </h1>
             <p className="text-sm leading-7 text-neutral-600">
-              {mode === 'request'
+              {hasCompleted
+                ? 'Your password has been changed successfully. Close this tab and go back to the previous Memora tab to log in again with your new password.'
+                : mode === 'request'
                 ? 'Enter your email and we will send you a secure recovery link.'
-                : 'Finish the recovery flow by setting a fresh password for your Memora account. After saving, we will send you back to login.'}
+                : mode === 'redeem'
+                  ? 'This tab is only for securely changing your password. Continue below to open the one-time recovery session, then set your new password.'
+                : isRecoveryFlow
+                  ? 'Finish the recovery flow by setting a fresh password for your Memora account.'
+                  : 'Confirm your current password, choose a new one, and we will update it securely before sending you back to login.'}
             </p>
           </div>
 
           <form onSubmit={mode === 'request' ? requestResetEmail : updatePassword} className="mt-8 space-y-4">
-            {mode === 'request' ? (
+            {hasCompleted ? null : mode === 'request' ? (
               <div className="space-y-2">
                 <label htmlFor="email" className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">
                   Email
@@ -219,8 +345,28 @@ export function ResetPasswordClient() {
                   placeholder="you@example.com"
                 />
               </div>
+            ) : mode === 'redeem' ? (
+              <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-5">
+                <p className="text-sm leading-7 text-neutral-600">
+                  Continue only in this newly opened tab. After your password is changed, the previous Memora tab will ask you to log in again with the new password.
+                </p>
+              </div>
             ) : (
               <>
+                <div className="space-y-2">
+                  <label htmlFor="currentPassword" className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">
+                    Current Password
+                  </label>
+                  <PasswordInput
+                    id="currentPassword"
+                    required={!isRecoveryFlow}
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                    placeholder={isRecoveryFlow ? 'Optional during email recovery' : 'Enter your current password'}
+                    autoComplete="current-password"
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <label htmlFor="password" className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">
                     New Password
@@ -248,12 +394,19 @@ export function ResetPasswordClient() {
             )}
 
             <button
-              type="submit"
-              disabled={isSubmitting}
+              type={mode === 'redeem' ? 'button' : 'submit'}
+              onClick={mode === 'redeem' ? () => void redeemRecoveryLink() : undefined}
+              disabled={isSubmitting || isRedeemingLink || hasCompleted}
               className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-neutral-950 px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800 disabled:opacity-50"
             >
-              {isSubmitting ? <RefreshCcw className="h-4 w-4 animate-spin" /> : null}
-              {mode === 'request' ? 'Send reset link' : 'Update password'}
+              {isSubmitting || isRedeemingLink ? <RefreshCcw className="h-4 w-4 animate-spin" /> : null}
+              {hasCompleted
+                ? 'Password updated'
+                : mode === 'request'
+                  ? 'Send reset link'
+                  : mode === 'redeem'
+                    ? 'Continue to reset password'
+                    : 'Update password'}
             </button>
           </form>
         </div>

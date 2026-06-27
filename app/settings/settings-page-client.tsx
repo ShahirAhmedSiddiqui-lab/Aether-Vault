@@ -3,20 +3,15 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { RefreshCcw, Save, ShieldCheck } from 'lucide-react';
-import { PasswordInput } from '@/app/_components/password-input';
 import { type UserPreferences, type UserProfile } from '@/lib/db';
 
 export function SettingsPageClient({ initialProfile }: { initialProfile: UserProfile }) {
   const [preferences, setPreferences] = React.useState<UserPreferences>(initialProfile.preferences);
   const [isSavingPreferences, setIsSavingPreferences] = React.useState(false);
-  const [isUpdatingPassword, setIsUpdatingPassword] = React.useState(false);
-  const [currentPassword, setCurrentPassword] = React.useState('');
-  const [newPassword, setNewPassword] = React.useState('');
-  const [confirmPassword, setConfirmPassword] = React.useState('');
+  const [isSendingResetEmail, setIsSendingResetEmail] = React.useState(false);
   const [feedback, setFeedback] = React.useState<string | null>(null);
   const [securityFeedback, setSecurityFeedback] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const [securityError, setSecurityError] = React.useState<string | null>(null);
 
   const updatePreference = <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => {
     setPreferences((prev) => ({
@@ -55,65 +50,10 @@ export function SettingsPageClient({ initialProfile }: { initialProfile: UserPro
     }
   };
 
-  const updatePassword = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setSecurityFeedback(null);
-    setSecurityError(null);
-
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      setSecurityError('Current password, new password, and confirmation are all required.');
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      setSecurityError('New password must be at least 6 characters.');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setSecurityError('New password confirmation does not match.');
-      return;
-    }
-
-    if (currentPassword === newPassword) {
-      setSecurityError('Choose a new password that is different from your current password.');
-      return;
-    }
-
-    setIsUpdatingPassword(true);
-
-    try {
-      const response = await fetch('/api/password/update', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          currentPassword,
-          password: newPassword,
-        }),
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Unable to update password.');
-      }
-
-      setSecurityFeedback(data.message || 'Password updated successfully.');
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-    } catch (updateError) {
-      console.error(updateError);
-      setSecurityError(updateError instanceof Error ? updateError.message : 'Unable to update password.');
-    } finally {
-      setIsUpdatingPassword(false);
-    }
-  };
-
   const sendResetEmail = async () => {
     setSecurityFeedback(null);
-    setSecurityError(null);
+    setError(null);
+    setIsSendingResetEmail(true);
 
     try {
       const response = await fetch('/api/password/forgot', {
@@ -132,7 +72,9 @@ export function SettingsPageClient({ initialProfile }: { initialProfile: UserPro
       setSecurityFeedback('Password reset email sent. Open the latest message to choose a new password.');
     } catch (sendError) {
       console.error(sendError);
-      setSecurityError(sendError instanceof Error ? sendError.message : 'Unable to send reset email.');
+      setError(sendError instanceof Error ? sendError.message : 'Unable to send reset email.');
+    } finally {
+      setIsSendingResetEmail(false);
     }
   };
 
@@ -239,94 +181,38 @@ export function SettingsPageClient({ initialProfile }: { initialProfile: UserPro
             <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-neutral-400">Security</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-neutral-950">Password management</h2>
             <p className="mt-2 max-w-2xl text-sm leading-7 text-neutral-600">
-              Change your password directly by confirming the current one first. If you no longer know it, you can still request a reset email.
+              Send a secure reset email to your account inbox and finish the password change from the link inside that message.
             </p>
           </div>
         </div>
 
-        <form onSubmit={updatePassword} className="mt-8 space-y-4">
-          <div className="rounded-3xl border border-neutral-200 bg-neutral-50 px-5 py-5 text-sm leading-7 text-neutral-600">
-            Signed in as <span className="font-semibold text-neutral-950">{initialProfile.email}</span>. Enter your current password so Memora can verify the change safely before updating Supabase.
+        <div className="mt-8 rounded-3xl border border-neutral-200 bg-neutral-50 px-5 py-5 text-sm leading-7 text-neutral-600">
+          We will send the reset link to <span className="font-semibold text-neutral-950">{initialProfile.email}</span>. Use that email to choose a fresh password.
+        </div>
+
+        {securityFeedback && (
+          <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            {securityFeedback}
           </div>
+        )}
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2 md:col-span-2">
-              <label htmlFor="currentPassword" className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">
-                Current password
-              </label>
-              <PasswordInput
-                id="currentPassword"
-                required
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-                placeholder="Enter your current password"
-                autoComplete="current-password"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="newPassword" className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">
-                New password
-              </label>
-              <PasswordInput
-                id="newPassword"
-                required
-                minLength={6}
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                placeholder="Minimum 6 characters"
-                autoComplete="new-password"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="confirmPassword" className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">
-                Confirm new password
-              </label>
-              <PasswordInput
-                id="confirmPassword"
-                required
-                minLength={6}
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                placeholder="Repeat your new password"
-                autoComplete="new-password"
-              />
-            </div>
+        {error && (
+          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
           </div>
+        )}
 
-          {securityFeedback && (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              {securityFeedback}
-            </div>
-          )}
-
-          {securityError && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {securityError}
-            </div>
-          )}
-
-          <div className="flex flex-wrap items-center gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={isUpdatingPassword}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-5 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50"
-            >
-              {isUpdatingPassword ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-              Update password
-            </button>
-
-            <button
-              type="button"
-              onClick={() => void sendResetEmail()}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-neutral-200 bg-white px-5 py-3 text-sm font-semibold text-neutral-800 transition hover:border-neutral-900 hover:text-neutral-950"
-            >
-              <RefreshCcw className="h-4 w-4" />
-              Email me a reset link instead
-            </button>
-          </div>
-        </form>
+        <div className="mt-8">
+          <button
+            type="button"
+            onClick={() => void sendResetEmail()}
+            disabled={isSendingResetEmail}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-5 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50"
+          >
+            {isSendingResetEmail ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+            Email me a reset link
+          </button>
+        </div>
       </section>
     </div>
   );

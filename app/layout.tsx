@@ -1,4 +1,5 @@
 import type {Metadata} from 'next';
+import { AuthSessionSync } from '@/app/_components/auth-session-sync';
 import './globals.css'; // Global styles
 
 export const metadata: Metadata = {
@@ -14,7 +15,10 @@ export const metadata: Metadata = {
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="en">
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <AuthSessionSync />
+        {children}
+      </body>
     </html>
   );
 }
