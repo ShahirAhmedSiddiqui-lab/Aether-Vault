@@ -1,8 +1,17 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { AuthShell } from '../_components/auth-shell';
 import { createClient } from '@/lib/supabase/server';
 import { getSafeUser } from '@/lib/supabase/auth';
+import { buildPageMetadata } from '@/lib/seo';
 import { LoginFormClient } from './login-form-client';
+
+export const metadata: Metadata = buildPageMetadata({
+  title: 'Log In',
+  description: 'Log in to your private Memora workspace.',
+  path: '/login',
+  noIndex: true,
+});
 
 export default async function LoginPage({
   searchParams,

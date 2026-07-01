@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { VaultWorkspace } from './_components/vault-workspace';
@@ -5,6 +6,14 @@ import { getProfileWithAvatarUrl } from '@/lib/supabase/profile';
 import { getSafeUser } from '@/lib/supabase/auth';
 import { attachSignedUrls } from '@/lib/supabase/vault';
 import { listChatSessions } from '@/lib/vault/chat';
+import { buildPageMetadata } from '@/lib/seo';
+
+export const metadata: Metadata = buildPageMetadata({
+  title: 'Vault',
+  description: 'Private Memora vault workspace.',
+  path: '/vault',
+  noIndex: true,
+});
 
 export default async function VaultPage() {
   const supabase = await createClient();

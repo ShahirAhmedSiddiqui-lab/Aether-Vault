@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /auth/callback
+Disallow: /vault
+Disallow: /settings
+Disallow: /profile
+Disallow: /onboarding
+Disallow: /reset-password
+Disallow: /update-password
+
+Sitemap: https://usememoraweb.vercel.app/sitemap.xml

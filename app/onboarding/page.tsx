@@ -1,9 +1,18 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight, Layers, Settings2, Sparkles } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import { BrandLockup } from '../_components/brand-lockup';
 import { createClient } from '@/lib/supabase/server';
 import { getSafeUser } from '@/lib/supabase/auth';
+import { buildPageMetadata } from '@/lib/seo';
+
+export const metadata: Metadata = buildPageMetadata({
+  title: 'Onboarding',
+  description: 'Memora first-time setup.',
+  path: '/onboarding',
+  noIndex: true,
+});
 
 export default async function OnboardingPage() {
   const supabase = await createClient();

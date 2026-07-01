@@ -1,8 +1,17 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { AuthShell } from '../_components/auth-shell';
 import { createClient } from '@/lib/supabase/server';
 import { getSafeUser } from '@/lib/supabase/auth';
+import { buildPageMetadata } from '@/lib/seo';
 import { LoginFormClient } from '../login/login-form-client';
+
+export const metadata: Metadata = buildPageMetadata({
+  title: 'Create Account',
+  description: 'Create your Memora account and start building your private AI second brain.',
+  path: '/sign-up',
+  noIndex: true,
+});
 
 export default async function SignUpPage({
   searchParams,
