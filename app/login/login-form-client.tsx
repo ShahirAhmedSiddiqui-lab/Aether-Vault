@@ -35,6 +35,7 @@ export function LoginFormClient({ initialMessage }: LoginFormClientProps) {
   const [isLoggingIn, setIsLoggingIn] = React.useState(false);
   const [isSigningUp, setIsSigningUp] = React.useState(false);
   const [isSendingReset, setIsSendingReset] = React.useState(false);
+  const [isAwaitingEmailConfirmation, setIsAwaitingEmailConfirmation] = React.useState(false);
 
   React.useEffect(() => {
     void router.prefetch('/vault');
@@ -129,8 +130,8 @@ export function LoginFormClient({ initialMessage }: LoginFormClientProps) {
 
       if (data.requiresEmailConfirmation) {
         setName('');
-        setEmail('');
         setPassword('');
+        setIsAwaitingEmailConfirmation(true);
         toast.success(data.message || 'Account created. Check your email to confirm your signup, then log in.');
         showSuccess(data.message || 'Account created. Check your email to confirm your signup, then log in.');
         return;
@@ -139,6 +140,7 @@ export function LoginFormClient({ initialMessage }: LoginFormClientProps) {
       setName('');
       setEmail('');
       setPassword('');
+      setIsAwaitingEmailConfirmation(false);
       queueFlashToast({ message: 'Account created successfully.' });
       router.replace('/vault');
       router.refresh();
@@ -151,6 +153,11 @@ export function LoginFormClient({ initialMessage }: LoginFormClientProps) {
   };
 
   const handleForgotPassword = async () => {
+    if (isAwaitingEmailConfirmation) {
+      showError('Confirm your email first. Password reset is disabled until the initial email verification is completed.');
+      return;
+    }
+
     const normalizedEmail = email.trim();
 
     if (!normalizedEmail) {
@@ -221,7 +228,9 @@ export function LoginFormClient({ initialMessage }: LoginFormClientProps) {
             name="name"
             type="text"
             value={name}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => {
+              setName(event.target.value);
+            }}
             placeholder="Memora User"
             autoComplete="name"
             className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-900 outline-none transition focus:border-neutral-900 focus:bg-white"
@@ -238,7 +247,12 @@ export function LoginFormClient({ initialMessage }: LoginFormClientProps) {
             type="email"
             required
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              if (isAwaitingEmailConfirmation) {
+                setIsAwaitingEmailConfirmation(false);
+              }
+            }}
             autoComplete="email"
             placeholder="you@example.com"
             className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-900 outline-none transition focus:border-neutral-900 focus:bg-white"
@@ -255,7 +269,9 @@ export function LoginFormClient({ initialMessage }: LoginFormClientProps) {
             required
             minLength={6}
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={(event) => {
+              setPassword(event.target.value);
+            }}
             autoComplete="current-password"
             placeholder="Minimum 6 characters"
           />
@@ -265,8 +281,8 @@ export function LoginFormClient({ initialMessage }: LoginFormClientProps) {
           <button
             type="button"
             onClick={() => void handleForgotPassword()}
-            disabled={isSendingReset}
-            className="inline-flex items-center gap-2 text-xs font-semibold text-neutral-500 transition hover:text-neutral-950 disabled:opacity-50"
+            disabled={isSendingReset || isAwaitingEmailConfirmation}
+            className="inline-flex items-center gap-2 text-xs font-semibold text-neutral-500 transition hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSendingReset ? <RefreshCcw className="h-3.5 w-3.5 animate-spin" /> : null}
             Forgot your password?
