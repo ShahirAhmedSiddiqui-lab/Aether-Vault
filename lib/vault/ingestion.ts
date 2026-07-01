@@ -86,6 +86,8 @@ type RemotePreviewData = {
   extractedText?: string;
 };
 
+const GENERATED_FLASHCARD_LIMIT = 3;
+
 export async function createAndProcessItem(
   supabase: SupabaseClient,
   userId: string,
@@ -417,7 +419,7 @@ async function processItem(
         source: options.fileData?.name ?? (aiAnalysis.source || options.previewMetadata.provider || options.initialSource),
         author: aiAnalysis.author ?? options.previewMetadata.authorName ?? null,
         preview_metadata: options.previewMetadata,
-        flashcards: aiAnalysis.flashcards.map((card, index) => ({
+        flashcards: aiAnalysis.flashcards.slice(0, GENERATED_FLASHCARD_LIMIT).map((card, index) => ({
           ...card,
           id: `fc-gen-${index}-${Date.now()}`,
         })),

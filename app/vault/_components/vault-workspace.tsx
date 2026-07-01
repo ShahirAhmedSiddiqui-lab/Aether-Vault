@@ -24,6 +24,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { ChatMessage, ChatPreviewResult, ChatReferencedSource, ChatSession, KnowledgeItem, UserPreferences } from '@/lib/db';
+import { queueFlashToast } from '@/lib/client/flash-toast';
 import { matchesSearch } from '@/lib/supabase/vault';
 import { cn } from '@/lib/utils';
 import { BrandLockup } from '@/app/_components/brand-lockup';
@@ -822,6 +823,7 @@ export function VaultWorkspace({ identity, initialItems = [], initialChatSession
       if (!response.ok) {
         throw new Error('Logout failed');
       }
+      queueFlashToast({ message: 'Logged out successfully.' });
       window.location.assign('/login');
     } catch (error) {
       console.error(error);

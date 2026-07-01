@@ -247,19 +247,33 @@ export async function attachSignedUrls(
   supabase: SupabaseClient,
   rows: KnowledgeItemRow[]
 ): Promise<KnowledgeItem[]> {
-  return Promise.all(
-    rows.map(async (row) => {
-      if (!row.file_path) {
-        return mapKnowledgeItem(row);
+  const signedRows = rows.filter((row) => row.file_path);
+  const signedUrlsByPath = new Map<string, string>();
+
+  if (signedRows.length > 0) {
+    const filePaths = signedRows
+      .map((row) => row.file_path)
+      .filter((filePath): filePath is string => Boolean(filePath));
+
+    const { data } = await supabase.storage
+      .from(VAULT_BUCKET)
+      .createSignedUrls(filePaths, 60 * 60);
+
+    data?.forEach((entry, index) => {
+      const filePath = filePaths[index];
+      if (filePath && entry?.signedUrl) {
+        signedUrlsByPath.set(filePath, entry.signedUrl);
       }
+    });
+  }
 
-      const { data } = await supabase.storage
-        .from(VAULT_BUCKET)
-        .createSignedUrl(row.file_path, 60 * 60);
+  return rows.map((row) => {
+    if (!row.file_path) {
+      return mapKnowledgeItem(row);
+    }
 
-      return mapKnowledgeItem(row, data?.signedUrl);
-    })
-  );
+    return mapKnowledgeItem(row, signedUrlsByPath.get(row.file_path));
+  });
 }
 
 export function matchesSearch(item: KnowledgeItem, query: string) {

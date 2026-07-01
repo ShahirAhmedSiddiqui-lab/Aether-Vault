@@ -7,7 +7,7 @@ coverage/
 !.env.example
 .agents/
 .codex/
-PLAN.md
+implementation.md
 skills-lock.json
 aether_vault_db.json
 metadata.json

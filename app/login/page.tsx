@@ -20,8 +20,8 @@ export default async function LoginPage({
   const { message } = await searchParams;
 
   return (
-    <main className="h-[100dvh] overflow-hidden bg-[radial-gradient(circle_at_top,_#f7f7f3,_#ffffff_55%)] text-neutral-950">
-      <div className="mx-auto flex h-full max-w-6xl flex-col justify-center gap-8 overflow-hidden px-6 py-6 lg:flex-row lg:items-center lg:gap-16">
+    <main className="min-h-[100dvh] overflow-y-auto bg-[radial-gradient(circle_at_top,_#f7f7f3,_#ffffff_55%)] text-neutral-950">
+      <div className="mx-auto flex min-h-[100dvh] max-w-6xl flex-col justify-center gap-8 px-6 py-8 sm:py-10 lg:flex-row lg:items-center lg:gap-16">
         <section className="animate-memora-fade-up max-w-xl space-y-6 lg:flex-1">
           <div className="inline-flex rounded-[26px] border border-neutral-200 bg-white/90 px-4 py-3 shadow-sm transition-premium hover:-translate-y-0.5">
             <BrandLockup size="sm" />
@@ -54,7 +54,7 @@ export default async function LoginPage({
           </div>
         </section>
 
-        <section className="animate-memora-fade-up [animation-delay:120ms] w-full max-w-md shrink-0 rounded-[28px] border border-neutral-200 bg-white p-7 shadow-[0_24px_80px_rgba(15,23,42,0.08)] lg:mt-0">
+        <section className="animate-memora-fade-up [animation-delay:120ms] w-full max-w-md shrink-0 self-center rounded-[28px] border border-neutral-200 bg-white p-7 shadow-[0_24px_80px_rgba(15,23,42,0.08)] lg:mt-0">
           <div className="mb-6">
             <p className="text-xs font-bold uppercase tracking-[0.28em] text-neutral-400">Account Access</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-neutral-950">Login or create an account</h2>

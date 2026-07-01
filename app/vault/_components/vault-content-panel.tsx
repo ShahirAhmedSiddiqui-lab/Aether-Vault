@@ -1,7 +1,5 @@
 'use client';
 
-/* eslint-disable @next/next/no-img-element */
-
 import * as React from 'react';
 import Fuse from 'fuse.js';
 import { useAutoAnimate } from '@formkit/auto-animate/react';
@@ -413,6 +411,9 @@ export function VaultContentPanel({
       >
         {filteredItems.map((item) => {
           const isSelected = selectedItemId === item.id;
+          const providerLabel = item.previewMetadata?.provider || item.source || item.previewMetadata?.sourceUrl || 'Saved source';
+          const creatorLabel = item.author || item.previewMetadata?.authorName || '';
+          const metaLabel = creatorLabel ? `${providerLabel} | ${creatorLabel}` : providerLabel;
 
           return (
             <motion.div
@@ -428,17 +429,6 @@ export function VaultContentPanel({
                 isSelected ? 'memora-selected-card' : 'border-neutral-200 hover:border-neutral-300 shadow-sm'
               )}
             >
-              {(item.type === 'Articles' || item.type === 'Social Links') && item.previewMetadata?.thumbnailUrl && (
-                <div className="mb-3 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100">
-                  <img
-                    src={item.previewMetadata.thumbnailUrl}
-                    alt={item.previewMetadata.title || item.title}
-                    className="h-32 w-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                </div>
-              )}
-
               <div className="flex justify-between items-start mb-3">
                 <span
                   className={cn(
@@ -533,11 +523,7 @@ export function VaultContentPanel({
               )}
 
               <div className="flex flex-wrap items-center gap-1.5 pt-4 mt-auto border-t border-neutral-105/10">
-                <span className="text-[10px] text-neutral-400 font-mono tracking-widest uppercase shrink-0">{item.source}</span>
-                <span className="text-neutral-300 select-none text-[10px]">&bull;</span>
-                <span className="text-[10.5px] text-neutral-400 font-mono">
-                  {item.type === 'Videos' && item.author ? item.author : item.readTime || '3 min'}
-                </span>
+                <span className="text-[10px] text-neutral-400 font-mono tracking-wide uppercase">{metaLabel}</span>
               </div>
             </motion.div>
           );

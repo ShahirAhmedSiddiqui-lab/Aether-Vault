@@ -4,7 +4,7 @@
 
 import * as React from 'react';
 import { motion } from 'motion/react';
-import { Bookmark, BookOpen, ExternalLink, ImageIcon, Layers, LoaderCircle, Maximize2, Minimize2, Play, RefreshCw, RotateCcw, Trash2, Volume2, X } from 'lucide-react';
+import { Bookmark, BookOpen, ImageIcon, Layers, LoaderCircle, Maximize2, Minimize2, Play, RefreshCw, RotateCcw, Trash2, Volume2, X } from 'lucide-react';
 import { KnowledgeItem } from '@/lib/db';
 import { cn } from '@/lib/utils';
 import { resolveItemPreviewPortal } from '@/lib/vault/preview';
@@ -88,17 +88,6 @@ export function VaultDetailPanel({
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {currentItem.url && (
-                <a
-                  href={currentItem.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-[10px] font-bold font-mono text-neutral-700 transition hover:border-neutral-300 hover:text-neutral-950"
-                >
-                  <span>Open</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              )}
               <button
                 onClick={(e) => onToggleBookmark(currentItem.id, !!currentItem.bookmarked, e)}
                 className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-[10px] font-bold font-mono text-neutral-700 transition hover:border-neutral-300 hover:text-neutral-950"
@@ -180,17 +169,6 @@ export function VaultDetailPanel({
           <div className="text-[9px] font-bold font-mono tracking-widest uppercase text-neutral-500">EXECUTIVE TAKEAWAY</div>
           <p className="text-neutral-700 text-xs leading-relaxed italic">&ldquo;{currentItem.summary}&rdquo;</p>
         </div>
-
-        {currentItem.extractedText && currentItem.extractedText.trim() && (
-          <div className="bg-neutral-50 border border-neutral-200 p-4 rounded-xl space-y-2">
-            <div className="text-[9px] font-bold font-mono tracking-widest uppercase text-neutral-500">
-              {currentItem.type === 'Voice Notes' ? 'FULL TRANSCRIPT' : currentItem.type === 'Images' ? 'OCR / EXTRACTED TEXT' : 'EXTRACTED TEXT'}
-            </div>
-            <div className="max-h-44 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-3 text-xs leading-relaxed text-neutral-700">
-              {currentItem.extractedText}
-            </div>
-          </div>
-        )}
 
         <div className="bg-neutral-50 border border-neutral-200 p-4 rounded-xl space-y-3.5">
           <div className="text-[9px] font-extrabold font-mono tracking-widest uppercase text-neutral-500 flex justify-between items-center">
@@ -275,17 +253,6 @@ export function VaultDetailPanel({
                   )}
                 </div>
               </div>
-
-              {currentItem.url && (
-                <a
-                  href={currentItem.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex text-sm font-medium text-neutral-700 underline underline-offset-4 hover:text-neutral-950"
-                >
-                  Open video
-                </a>
-              )}
             </div>
           )}
 
@@ -403,15 +370,6 @@ export function VaultDetailPanel({
               <div className="p-3.5 bg-white border border-neutral-200 rounded-lg max-h-48 overflow-y-auto leading-relaxed text-left text-xs text-neutral-800">
                 {currentItem.content}
               </div>
-              {currentItem.url && (
-                <div className="flex justify-between items-center text-[9px] font-mono text-neutral-400 pt-1 border-t border-neutral-100">
-                  <span>Source domain verified</span>
-                  <a href={currentItem.url} target="_blank" rel="noreferrer" className="text-neutral-900 hover:underline flex items-center space-x-0.5 font-bold">
-                    <span>Visit original</span>
-                    <ExternalLink className="w-2.5 h-2.5" />
-                  </a>
-                </div>
-              )}
             </div>
           )}
 
@@ -448,20 +406,6 @@ export function VaultDetailPanel({
                   <p className="text-xs leading-relaxed font-sans italic text-neutral-200">{previewPortal.description}</p>
                 ) : (
                   <p className="text-xs leading-relaxed font-sans italic text-neutral-200">&ldquo;{currentItem.content}&rdquo;</p>
-                )}
-
-                {currentItem.url && (
-                  <div className="pt-2.5 border-t border-neutral-800/80 flex justify-end text-[10px]">
-                    <a
-                      href={currentItem.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[9px] font-mono font-bold text-neutral-400 hover:text-white inline-flex items-center space-x-1 transition"
-                    >
-                      <span>View original post</span>
-                      <ExternalLink className="w-2.5 h-2.5" />
-                    </a>
-                  </div>
                 )}
               </div>
             </div>
